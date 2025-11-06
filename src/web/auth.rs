@@ -72,7 +72,8 @@ pub async fn verify_start(
         tracing::info!("Discord already linked, validating Discord user ID");
         // Already linked, validate
         if discord.user_id.as_deref() == Some(&verification.discord_user_id.to_string()) {
-            tracing::info!("Discord ID matches! Completing verification");
+            tracing::info!("Discord ID matches, completing verification");
+
             // Send verification completion event to bot
             let completion = crate::state::VerificationComplete {
                 discord_user_id: verification.discord_user_id,
