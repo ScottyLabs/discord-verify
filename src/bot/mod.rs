@@ -25,6 +25,7 @@ pub async fn run(
                 commands::verify(),
                 commands::unverify(),
                 commands::userinfo(),
+                commands::setverifiedrole(),
             ],
             ..Default::default()
         })
@@ -64,6 +65,27 @@ pub async fn run(
             .await
             {
                 tracing::error!("Failed to complete verification: {}", e);
+
+                // Send error message to user via DM
+                let user_id = completion.discord_user_id;
+                if let Ok(dm_channel) = user_id.create_dm_channel(&http).await {
+                    let error_message = format!(
+                        "Verification failed: {}\n\nPlease contact a server administrator for assistance.",
+                        e
+                    );
+
+                    if let Err(dm_err) = dm_channel
+                        .send_message(
+                            &http,
+                            serenity::CreateMessage::default().content(error_message),
+                        )
+                        .await
+                    {
+                        tracing::error!("Failed to send error DM to user {}: {}", user_id, dm_err);
+                    }
+                } else {
+                    tracing::error!("Failed to create DM channel with user {}", user_id);
+                }
             }
         }
     });
