@@ -1,0 +1,47 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: discord-verify-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: discord-verify-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - KEYCLOAK_URL=${KEYCLOAK_URL}
+      - KEYCLOAK_REALM=${KEYCLOAK_REALM}
+      - KEYCLOAK_OIDC_CLIENT_ID=${KEYCLOAK_OIDC_CLIENT_ID}
+      - KEYCLOAK_OIDC_CLIENT_SECRET=${KEYCLOAK_OIDC_CLIENT_SECRET}
+      - KEYCLOAK_ADMIN_CLIENT_ID=${KEYCLOAK_ADMIN_CLIENT_ID}
+      - KEYCLOAK_ADMIN_CLIENT_SECRET=${KEYCLOAK_ADMIN_CLIENT_SECRET}
+      - APP_URL=${APP_URL}
+      - REDIS_URL=redis://redis:6379
+      - RUST_LOG=${RUST_LOG:-info}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    depends_on:
+      redis:
+        condition: service_healthy
+
+volumes:
+  redis-data:
+    driver: local
