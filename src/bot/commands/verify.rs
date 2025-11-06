@@ -1,6 +1,7 @@
 use crate::bot::{Context, Error};
 use crate::state::PendingVerification;
 use poise::serenity_prelude as serenity;
+use redis::AsyncCommands;
 use uuid::Uuid;
 
 use super::utils::get_verified_role_id;
@@ -23,6 +24,21 @@ pub async fn verify(ctx: Context<'_>) -> Result<(), Error> {
             return Ok(());
         }
     };
+
+    // Check if user is already verified
+    let mut conn = state.redis.clone();
+    let redis_key = format!("discord:{}:keycloak", user.id);
+    let existing_verification: Option<String> = conn.get(&redis_key).await?;
+
+    if existing_verification.is_some() {
+        ctx.send(
+            poise::CreateReply::default()
+                .content("You are already verified. Use /unverify if you need to re-verify with a different account.")
+                .ephemeral(true),
+        )
+        .await?;
+        return Ok(());
+    }
 
     // Generate unique state token
     let state_token = Uuid::new_v4();
