@@ -2,6 +2,7 @@
 name = "discord-verify"
 version = "0.1.0"
 edition = "2024"
+license = "(MIT OR Apache-2.0)"
 
 [package.metadata.leptos]
 # The name used by wasm-bindgen/cargo-leptos for the JS/WASM bundle
@@ -21,12 +22,6 @@ site-addr = "0.0.0.0:3000"
 
 # The port to use for automatic reload monitoring
 reload-port = 3001
-
-# [Optional] Command to use when running end2end tests
-end2end-cmd = ""
-
-# [Optional] Files in the asset-dir that Leptos will not process (copy as-is)
-#asset-ignore = ["ignore/**"]
 
 # The browserlist query used for optimizing the CSS.
 browserquery = "defaults"
