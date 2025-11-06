@@ -26,6 +26,7 @@ pub async fn run(
                 commands::unverify(),
                 commands::userinfo(),
                 commands::setverifiedrole(),
+                commands::config(),
             ],
             ..Default::default()
         })
