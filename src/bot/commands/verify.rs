@@ -107,6 +107,14 @@ pub async fn complete_verification(
 
     // Store mapping in Redis
     let mut conn = state.redis.clone();
+    let timestamp = chrono::Utc::now().timestamp();
+
+    redis::cmd("SET")
+        .arg(format!("discord:{}:verified_at", discord_user_id))
+        .arg(timestamp.to_string())
+        .query_async::<()>(&mut conn)
+        .await?;
+
     redis::cmd("SET")
         .arg(format!("discord:{}:keycloak", discord_user_id))
         .arg(&keycloak_user_id)

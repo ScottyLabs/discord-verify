@@ -71,6 +71,11 @@ pub async fn unverify(
         .query_async::<()>(&mut conn)
         .await?;
 
+    redis::cmd("DEL")
+        .arg(format!("discord:{}:verified_at", target_user.id))
+        .query_async::<()>(&mut conn)
+        .await?;
+
     // Remove verified role
     let member = guild_id.member(&ctx.http(), target_user.id).await?;
 
