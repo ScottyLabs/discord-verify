@@ -21,10 +21,7 @@ pub async fn userinfo(
         None => {
             ctx.send(
                 poise::CreateReply::default()
-                    .content(format!(
-                        "{} is not verified.",
-                        target_user.mention()
-                    ))
+                    .content(format!("{} is not verified.", target_user.mention()))
                     .ephemeral(true),
             )
             .await?;
@@ -54,6 +51,7 @@ pub async fn userinfo(
     let email = keycloak_user
         .email
         .unwrap_or_else(|| "Not provided".to_string());
+
     let first_name = keycloak_user.first_name.unwrap_or_else(|| "".to_string());
     let last_name = keycloak_user.last_name.unwrap_or_else(|| "".to_string());
     let full_name = if !first_name.is_empty() || !last_name.is_empty() {
@@ -67,8 +65,7 @@ pub async fn userinfo(
             .embed(
                 serenity::CreateEmbed::new()
                     .title(format!("User Information for {}", target_user.name))
-                    .field("Discord User", target_user.mention().to_string(), true)
-                    .field("Andrew ID", username, true)
+                    .field("Andrew ID", username, false)
                     .field("Full Name", full_name, false)
                     .field("Email", email, false)
                     .color(serenity::Color::BLUE),
