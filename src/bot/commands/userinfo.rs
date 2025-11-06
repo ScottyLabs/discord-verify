@@ -2,7 +2,7 @@ use crate::bot::{Context, Error};
 use poise::serenity_prelude::{self as serenity, Mentionable};
 use redis::AsyncCommands;
 
-/// Display Keycloak user information for a verified Discord user
+/// Display user information for a verified Discord user
 #[poise::command(slash_command)]
 pub async fn userinfo(
     ctx: Context<'_>,

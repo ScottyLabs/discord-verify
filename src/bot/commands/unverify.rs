@@ -4,7 +4,7 @@ use redis::AsyncCommands;
 
 use super::utils::{get_verified_role_id, is_admin};
 
-/// Remove verification
+/// Remove verification for a user
 #[poise::command(slash_command)]
 pub async fn unverify(
     ctx: Context<'_>,

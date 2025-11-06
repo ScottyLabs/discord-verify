@@ -6,6 +6,7 @@ use uuid::Uuid;
 
 use super::utils::get_verified_role_id;
 
+/// Verify your Andrew ID
 #[poise::command(slash_command)]
 pub async fn verify(ctx: Context<'_>) -> Result<(), Error> {
     let state = ctx.data();
