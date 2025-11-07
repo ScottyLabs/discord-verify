@@ -19,11 +19,11 @@ pub fn ErrorPage() -> impl IntoView {
                 )),
                 "wrong_account" => Some((
                     "Wrong Discord Account",
-                    "The Discord account you linked doesn't match the one that requested verification. Please ensure you're logging in with the correct Discord account."
+                    "The Discord account you linked doesn't match the one that requested verification. If you need to switch accounts, please unlink the current Discord account in your account settings (https://idp.scottylabs.org/realms/scottylabs/account) and try again."
                 )),
                 "already_linked" => Some((
                     "Account Already Linked",
-                    "Your Keycloak account is already linked to a different Discord account. Please unlink it first in your Keycloak account settings, or contact an administrator."
+                    "Your account is already linked to a different Discord account. Please unlink it first in your account settings (https://idp.scottylabs.org/realms/scottylabs/account)."
                 )),
                 "not_linked" => Some((
                     "Discord Account Not Linked",
