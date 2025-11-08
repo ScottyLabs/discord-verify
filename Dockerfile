@@ -9,31 +9,31 @@ RUN cargo chef prepare --recipe-path recipe.json
 
 # Build dependencies - this layer is cached when dependencies don't change
 FROM chef AS builder
-COPY --from=planner /app/recipe.json recipe.json
 
-# Build dependencies
+# Install cargo-leptos
+RUN cargo install --locked cargo-leptos
+
+# Build dependencies (cached layer)
+COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
 
-# Build application
+# Copy source and build application
 COPY . .
-RUN cargo build --release
+RUN cargo leptos build --release
 
 # Runtime image
 FROM debian:bookworm-slim AS runtime
 WORKDIR /app
 
 # Install runtime dependencies
-RUN apt-get update && \
-    apt-get install -y \
+RUN apt-get update && apt-get install -y \
     ca-certificates \
-    libssl3 \
-    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy the binary from builder
 COPY --from=builder /app/target/release/discord-verify /usr/local/bin/discord-verify
 
-# Copy Leptos assets if they exist
+# Copy Leptos frontend assets
 COPY --from=builder /app/target/site /app/target/site
 
 EXPOSE 3000
