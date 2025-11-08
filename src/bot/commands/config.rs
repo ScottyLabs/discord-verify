@@ -98,7 +98,7 @@ pub async fn config(ctx: Context<'_>) -> Result<(), Error> {
         .title("Server Configuration")
         .field("Verified Role", role_info, false)
         .field(
-            "Verification Statistics",
+            "Statistics",
             format!(
                 "Verified Users: {}/{}\n{}",
                 verified_count, total_members, progress_bar
