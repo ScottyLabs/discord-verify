@@ -27,11 +27,14 @@ async fn main() -> Result<()> {
         .with(tracing_subscriber::fmt::layer())
         .try_init()?;
 
+    tracing::info!("Configuration loaded successfully");
+
     // Create channel for verification completion events
     let (verification_tx, verification_rx) = mpsc::unbounded_channel();
 
     // Initialize shared state
     let app_state = Arc::new(AppState::new(config, verification_tx).await?);
+    tracing::info!("App state created successfully");
 
     // Spawn Discord bot in background
     let bot_state = app_state.clone();

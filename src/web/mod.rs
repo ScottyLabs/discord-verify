@@ -80,6 +80,8 @@ pub async fn serve(state: Arc<AppState>) -> anyhow::Result<()> {
         .await?
         .build();
 
+    tracing::info!("OIDC discovery completed successfully");
+
     let oidc_auth_service = ServiceBuilder::new()
         .layer(HandleErrorLayer::new(|e: MiddlewareError| async move {
             tracing::error!("OIDC Auth Layer error: {:?}", e);
