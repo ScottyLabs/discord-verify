@@ -26,15 +26,20 @@ pub async fn verify(ctx: Context<'_>) -> Result<(), Error> {
         }
     };
 
-    // Check if user is already verified
+    // Check if user is already verified globally
     let mut conn = state.redis.clone();
     let redis_key = format!("discord:{}:keycloak", user.id);
-    let existing_verification: Option<String> = conn.get(&redis_key).await?;
+    let existing_keycloak_id: Option<String> = conn.get(&redis_key).await?;
 
-    if existing_verification.is_some() {
+    if let Some(_) = existing_keycloak_id {
+        // Just assign role in this server
+        let verified_role = get_verified_role_id(&ctx.http(), &mut conn, guild_id).await?;
+        let member = guild_id.member(&ctx.http(), user.id).await?;
+        member.add_role(&ctx.http(), verified_role).await?;
+
         ctx.send(
             poise::CreateReply::default()
-                .content("You are already verified. Use /unverify if you need to re-verify with a different account.")
+                .content("You are already verified. The verified role has been assigned to you in this server.")
                 .ephemeral(true),
         )
         .await?;
