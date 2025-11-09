@@ -77,8 +77,7 @@ pub async fn serve(state: Arc<AppState>) -> anyhow::Result<()> {
             "{}/realms/{}",
             state.config.keycloak_url, state.config.keycloak_realm
         ))
-        .await
-        .unwrap()
+        .await?
         .build();
 
     let oidc_auth_service = ServiceBuilder::new()
