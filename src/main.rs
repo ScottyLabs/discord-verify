@@ -36,12 +36,15 @@ async fn main() -> Result<()> {
     // Spawn Discord bot in background
     let bot_state = app_state.clone();
     tokio::spawn(async move {
+        tracing::info!("Starting Discord bot...");
+
         if let Err(e) = bot::run(bot_state, verification_rx).await {
             tracing::error!("Discord bot error: {}", e);
         }
     });
 
     // Start web server
+    tracing::info!("Starting web server...");
     web::serve(app_state).await?;
 
     Ok(())
