@@ -14,24 +14,12 @@ services:
       retries: 3
 
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/scottylabs/discord-verify-production:latest
+    env_file: .env
     container_name: discord-verify-app
     restart: unless-stopped
     ports:
       - "3000:3000"
-    environment:
-      - DISCORD_TOKEN=${DISCORD_TOKEN}
-      - KEYCLOAK_URL=${KEYCLOAK_URL}
-      - KEYCLOAK_REALM=${KEYCLOAK_REALM}
-      - KEYCLOAK_OIDC_CLIENT_ID=${KEYCLOAK_OIDC_CLIENT_ID}
-      - KEYCLOAK_OIDC_CLIENT_SECRET=${KEYCLOAK_OIDC_CLIENT_SECRET}
-      - KEYCLOAK_ADMIN_CLIENT_ID=${KEYCLOAK_ADMIN_CLIENT_ID}
-      - KEYCLOAK_ADMIN_CLIENT_SECRET=${KEYCLOAK_ADMIN_CLIENT_SECRET}
-      - APP_URL=${APP_URL}
-      - REDIS_URL=redis://redis:6379
-      - RUST_LOG=${RUST_LOG:-info}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 30s
