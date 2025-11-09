@@ -32,6 +32,9 @@ RUN apt-get update && apt-get install -y \
 # Copy the binary from builder
 COPY --from=builder /app/target/release/discord-verify /usr/local/bin/discord-verify
 
+# Copy Cargo.toml for Leptos configuration
+COPY --from=builder /app/Cargo.toml /app/Cargo.toml
+
 EXPOSE 3000
 
 CMD ["discord-verify"]
