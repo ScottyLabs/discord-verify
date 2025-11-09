@@ -89,7 +89,13 @@ pub async fn config(ctx: Context<'_>) -> Result<(), Error> {
         let guild_cache = guild_id
             .to_guild_cached(&cache)
             .ok_or("Guild not found in cache")?;
-        guild_cache.member_count as usize
+
+        guild_cache
+            .members
+            .keys()
+            .filter_map(|member_id| cache.user(*member_id))
+            .filter(|user| !user.bot)
+            .count()
     };
 
     let progress_bar = generate_progress_bar(verified_count, total_members, 20);
