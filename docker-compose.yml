@@ -1,6 +1,6 @@
 services:
   redis:
-    image: redis:7-alpine
+    image: docker.io/library/redis:7-alpine
     container_name: discord-verify-redis
     restart: unless-stopped
     ports:
