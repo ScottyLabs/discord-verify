@@ -482,7 +482,8 @@ async fn handle_save_roles(
     // Show success message
     let roles_list = created_roles
         .iter()
-        .map(|(_, role_id)| format!("* <@{}>", role_id))
+        // Manually format role mentions because it may not be cached yet
+        .map(|(_, role_id)| format!("* <@&{}>", role_id))
         .collect::<Vec<_>>()
         .join("\n");
 
