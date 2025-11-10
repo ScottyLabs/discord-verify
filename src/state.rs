@@ -160,10 +160,20 @@ impl SetupRolesSession {
 
         // Delete old roles and their Redis keys
         for (role_key, role_id) in &roles_to_delete {
-            if let Err(e) = guild_id.delete_role(http, *role_id, None).await {
-                tracing::warn!("Failed to delete role {}: {}", role_id, e);
+            // Check if the role still exists in the guild before trying to delete it
+            if guild.roles.contains_key(role_id) {
+                if let Err(e) = guild_id.delete_role(http, *role_id, None).await {
+                    tracing::warn!("Failed to delete role {}: {}", role_id, e);
+                }
+            } else {
+                tracing::debug!(
+                    "Role {} (ID: {}) already deleted from Discord, cleaning up Redis key",
+                    role_key,
+                    role_id
+                );
             }
 
+            // Clean up the Redis key regardless of whether the Discord role exists
             let redis_key = format!("guild:{}:role:{}", guild_id, role_key);
             let _: () = redis.del(&redis_key).await?;
         }
