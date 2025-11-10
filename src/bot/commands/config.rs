@@ -126,15 +126,11 @@ pub async fn handle(
     let container = CreateContainer::new(vec![
         CreateComponent::TextDisplay(CreateTextDisplay::new("# Configuration")),
         CreateComponent::TextDisplay(CreateTextDisplay::new(format!(
-            "Current verification settings for this server:\n{}",
-            mode_description
+            "Current verification settings for this server:\n{}\n* **Verified Role:** {}",
+            mode_description, role_info
         ))),
         CreateComponent::TextDisplay(CreateTextDisplay::new(format!(
-            "* **Verified Role:** {}",
-            role_info
-        ))),
-        CreateComponent::TextDisplay(CreateTextDisplay::new(format!(
-            "Verified Users: {}/{} (total includes bots)\n{}\n\
+            "Verified Users: {}/{} (total includes bots)\n{}\n\n\
             {} users still need to verify • Use `/setuproles` to change mode",
             verified_count,
             total_members,

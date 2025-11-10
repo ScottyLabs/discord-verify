@@ -488,7 +488,7 @@ async fn handle_save_roles(
         .join("\n");
 
     let container = CreateContainer::new(vec![
-        CreateComponent::TextDisplay(CreateTextDisplay::new("# Roles Created Successfully")),
+        CreateComponent::TextDisplay(CreateTextDisplay::new("# Success")),
         CreateComponent::TextDisplay(CreateTextDisplay::new(format!(
             "The following roles have been created and configured:\n{}\n\
             Users will now automatically receive these roles when they verify.",
