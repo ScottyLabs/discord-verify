@@ -70,16 +70,17 @@ pub async fn handle(
                 CreateSelectMenuOption::new("Classes", "classes")
                     .description("First-Year through Doctoral (7 roles)")
                     .default_selection(current_mode == "classes"),
+                // No default_selection on custom because you can switch to a
+                // different custom mode from custom mode
                 CreateSelectMenuOption::new("Custom", "custom")
-                    .description("Choose which levels and classes to assign")
-                    .default_selection(current_mode == "custom"),
+                    .description("Choose which levels and classes to assign"),
             ]
             .into(),
         },
     )
     .placeholder("Select role assignment mode");
 
-    // Create components v2 message with heading and description in a container
+    // Create components v2 message
     let container = CreateContainer::new(vec![
         CreateComponent::TextDisplay(CreateTextDisplay::new("# Role Config")),
         CreateComponent::TextDisplay(CreateTextDisplay::new(
