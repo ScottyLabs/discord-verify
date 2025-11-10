@@ -1,44 +1,74 @@
-use crate::bot::{Context, Error};
-use poise::serenity_prelude::{self as serenity, Mentionable};
+use crate::bot::Error;
+use crate::state::AppState;
 use redis::AsyncCommands;
+use serenity::all::{
+    CommandInteraction, CommandOptionType, Context, CreateCommand, CreateCommandOption,
+    CreateInteractionResponse, CreateInteractionResponseMessage, Mentionable, ResolvedOption,
+    ResolvedValue,
+};
+use std::sync::Arc;
 
 use super::utils::{get_verified_role_id, is_admin};
 
-/// Remove verification for a user
-#[poise::command(slash_command)]
-pub async fn unverify(
-    ctx: Context<'_>,
-    #[description = "User to unverify (defaults to you)"] user: Option<serenity::User>,
+/// Register the unverify command
+pub fn register() -> CreateCommand<'static> {
+    CreateCommand::new("unverify")
+        .description("Remove verification for a user")
+        .add_option(
+            CreateCommandOption::new(
+                CommandOptionType::User,
+                "user",
+                "User to unverify (defaults to you)",
+            )
+            .required(false),
+        )
+}
+
+/// Handle the unverify command
+pub async fn handle(
+    ctx: &Context,
+    command: &CommandInteraction,
+    state: &Arc<AppState>,
 ) -> Result<(), Error> {
-    let state = ctx.data();
-    let target_user = user.as_ref().unwrap_or_else(|| ctx.author());
+    let user = &command.user;
+
+    // Get the target user from options, or default to command user
+    let target_user = if let Some(ResolvedOption {
+        value: ResolvedValue::User(u, _),
+        ..
+    }) = command.data.options().first()
+    {
+        u
+    } else {
+        user
+    };
 
     // Get guild_id from context
-    let guild_id = match ctx.guild_id() {
+    let guild_id = match command.guild_id {
         Some(id) => id,
         None => {
-            ctx.send(
-                poise::CreateReply::default()
+            let response = CreateInteractionResponse::Message(
+                CreateInteractionResponseMessage::new()
                     .content("This command can only be used in a server.")
                     .ephemeral(true),
-            )
-            .await?;
+            );
+            command.create_response(&ctx.http, response).await?;
             return Ok(());
         }
     };
 
     // If targeting another user, require administrator permissions
-    if target_user.id != ctx.author().id {
-        if !is_admin(&ctx, guild_id, ctx.author().id).await? {
-            ctx.send(
-                poise::CreateReply::default()
+    if target_user.id != user.id {
+        if !is_admin(ctx, &command.member, guild_id, user.id).await? {
+            let response = CreateInteractionResponse::Message(
+                CreateInteractionResponseMessage::new()
                     .content("You need administrator permissions to unverify other users.")
                     .ephemeral(true),
-            )
-            .await?;
+            );
+            command.create_response(&ctx.http, response).await?;
             return Ok(());
         }
-    };
+    }
 
     // Look up Keycloak user ID from Redis
     let mut conn = state.redis.clone();
@@ -49,13 +79,12 @@ pub async fn unverify(
     let keycloak_user_id = match keycloak_user_id {
         Some(id) => id,
         None => {
-            ctx.send(
-                poise::CreateReply::default()
+            let response = CreateInteractionResponse::Message(
+                CreateInteractionResponseMessage::new()
                     .content(format!("{} is not verified.", target_user.mention()))
                     .ephemeral(true),
-            )
-            .await?;
-
+            );
+            command.create_response(&ctx.http, response).await?;
             return Ok(());
         }
     };
@@ -77,23 +106,23 @@ pub async fn unverify(
         .await?;
 
     // Remove verified role
-    let member = guild_id.member(&ctx.http(), target_user.id).await?;
+    let member = guild_id.member(&ctx.http, target_user.id).await?;
 
-    if let Ok(verified_role) = get_verified_role_id(&ctx.http(), &mut conn, guild_id).await {
+    if let Ok(verified_role) = get_verified_role_id(&ctx.http, &mut conn, guild_id).await {
         if member.roles.contains(&verified_role) {
-            member.remove_role(&ctx.http(), verified_role).await?;
+            member.remove_role(&ctx.http, verified_role, None).await?;
         }
     }
 
-    ctx.send(
-        poise::CreateReply::default()
+    let response = CreateInteractionResponse::Message(
+        CreateInteractionResponseMessage::new()
             .content(format!(
                 "Removed verification for {}.",
                 target_user.mention()
             ))
             .ephemeral(true),
-    )
-    .await?;
+    );
+    command.create_response(&ctx.http, response).await?;
 
     Ok(())
 }

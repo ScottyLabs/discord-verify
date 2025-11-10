@@ -1,15 +1,45 @@
-use crate::bot::{Context, Error};
-use poise::serenity_prelude::{self as serenity, Mentionable};
+use crate::bot::Error;
+use crate::state::AppState;
 use redis::AsyncCommands;
+use serenity::all::{
+    Colour, CommandInteraction, CommandOptionType, Context, CreateCommand, CreateCommandOption,
+    CreateEmbed, CreateInteractionResponse, CreateInteractionResponseMessage, Mentionable,
+    ResolvedOption, ResolvedValue,
+};
+use std::sync::Arc;
 
-/// Display user information for a verified Discord user
-#[poise::command(slash_command)]
-pub async fn userinfo(
-    ctx: Context<'_>,
-    #[description = "User to get info for (defaults to you)"] user: Option<serenity::User>,
+/// Register the userinfo command
+pub fn register() -> CreateCommand<'static> {
+    CreateCommand::new("userinfo")
+        .description("Display user information for a verified Discord user")
+        .add_option(
+            CreateCommandOption::new(
+                CommandOptionType::User,
+                "user",
+                "User to get info for (defaults to you)",
+            )
+            .required(false),
+        )
+}
+
+/// Handle the userinfo command
+pub async fn handle(
+    ctx: &Context,
+    command: &CommandInteraction,
+    state: &Arc<AppState>,
 ) -> Result<(), Error> {
-    let state = ctx.data();
-    let target_user = user.as_ref().unwrap_or_else(|| ctx.author());
+    let user = &command.user;
+
+    // Get the target user from options, or default to command user
+    let target_user = if let Some(ResolvedOption {
+        value: ResolvedValue::User(u, _),
+        ..
+    }) = command.data.options().first()
+    {
+        u
+    } else {
+        user
+    };
 
     // Look up Keycloak user ID from Redis
     let mut conn = state.redis.clone();
@@ -19,12 +49,12 @@ pub async fn userinfo(
     let keycloak_user_id = match keycloak_user_id {
         Some(id) => id,
         None => {
-            ctx.send(
-                poise::CreateReply::default()
+            let response = CreateInteractionResponse::Message(
+                CreateInteractionResponseMessage::new()
                     .content(format!("{} is not verified.", target_user.mention()))
                     .ephemeral(true),
-            )
-            .await?;
+            );
+            command.create_response(&ctx.http, response).await?;
             return Ok(());
         }
     };
@@ -34,12 +64,12 @@ pub async fn userinfo(
         Ok(user) => user,
         Err(e) => {
             tracing::error!("Failed to fetch Keycloak user info: {}", e);
-            ctx.send(
-                poise::CreateReply::default()
+            let response = CreateInteractionResponse::Message(
+                CreateInteractionResponseMessage::new()
                     .content("Failed to fetch user information from Keycloak.")
                     .ephemeral(true),
-            )
-            .await?;
+            );
+            command.create_response(&ctx.http, response).await?;
             return Ok(());
         }
     };
@@ -60,19 +90,19 @@ pub async fn userinfo(
         "Not provided".to_string()
     };
 
-    ctx.send(
-        poise::CreateReply::default()
-            .embed(
-                serenity::CreateEmbed::new()
-                    .title(format!("User Information for {}", target_user.name))
-                    .field("Andrew ID", username, false)
-                    .field("Full Name", full_name, false)
-                    .field("Email", email, false)
-                    .color(serenity::Color::BLUE),
-            )
+    let embed = CreateEmbed::new()
+        .title(format!("User Information for {}", target_user.name))
+        .field("Andrew ID", username, false)
+        .field("Full Name", full_name, false)
+        .field("Email", email, false)
+        .colour(Colour::BLUE);
+
+    let response = CreateInteractionResponse::Message(
+        CreateInteractionResponseMessage::new()
+            .embed(embed)
             .ephemeral(true),
-    )
-    .await?;
+    );
+    command.create_response(&ctx.http, response).await?;
 
     Ok(())
 }

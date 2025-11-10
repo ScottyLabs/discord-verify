@@ -1,16 +1,16 @@
-use crate::bot::{Context, Error};
-use poise::serenity_prelude as serenity;
+use crate::bot::Error;
 use redis::AsyncCommands;
+use serenity::all::{Context, GuildId, Member, Permissions, RoleId, UserId};
 
 /// Helper function to get the configured verified role for a guild.
 /// Returns an error if no role is configured or if the configured role no longer exists.
 pub async fn get_verified_role_id(
-    http: &serenity::Http,
+    http: &serenity::all::Http,
     redis: &mut redis::aio::ConnectionManager,
-    guild_id: serenity::GuildId,
-) -> Result<serenity::RoleId, Error> {
+    guild_id: GuildId,
+) -> Result<RoleId, Error> {
     // Try to get configured role from Redis
-    let redis_key = format!("guild:{}:verified_role", guild_id);
+    let redis_key = format!("guild:{}:role:verified", guild_id);
     let role_id_str: Option<String> = redis.get(&redis_key).await?;
 
     let role_id_str = role_id_str.ok_or_else(|| {
@@ -21,7 +21,7 @@ pub async fn get_verified_role_id(
     let role_id_u64 = role_id_str
         .parse::<u64>()
         .map_err(|_| "Invalid role ID stored in configuration")?;
-    let role_id = serenity::RoleId::new(role_id_u64);
+    let role_id = RoleId::new(role_id_u64);
 
     // Verify the role still exists
     let roles = guild_id.roles(http).await?;
@@ -37,15 +37,19 @@ pub async fn get_verified_role_id(
 
 /// Check if a user has administrator permissions in a guild
 pub async fn is_admin(
-    ctx: &Context<'_>,
-    guild_id: serenity::GuildId,
-    user_id: serenity::UserId,
+    ctx: &Context,
+    member_option: &Option<Box<Member>>,
+    guild_id: GuildId,
+    user_id: UserId,
 ) -> Result<bool, Error> {
-    let member = guild_id.member(&ctx.http(), user_id).await?;
+    // Get the member from the option or fetch it
+    let member = match member_option {
+        Some(m) => (**m).clone(),
+        None => guild_id.member(&ctx.http, user_id).await?,
+    };
 
-    let cache = ctx.cache();
     let guild = guild_id
-        .to_guild_cached(&cache)
+        .to_guild_cached(&ctx.cache)
         .ok_or("Guild not found in cache")?;
 
     // Check if user is the owner
@@ -54,10 +58,10 @@ pub async fn is_admin(
     }
 
     // For guild-wide permissions, compute from base roles
-    let mut permissions = serenity::Permissions::empty();
+    let mut permissions = Permissions::empty();
 
     // Add @everyone role permissions
-    if let Some(everyone_role) = guild.roles.get(&serenity::RoleId::new(guild_id.get())) {
+    if let Some(everyone_role) = guild.roles.get(&RoleId::new(guild_id.get())) {
         permissions |= everyone_role.permissions;
     }
 

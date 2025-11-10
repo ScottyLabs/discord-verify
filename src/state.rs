@@ -1,6 +1,6 @@
-use poise::serenity_prelude::all::{GuildId, UserId};
 use redis::{Client, aio::ConnectionManager};
 use serde::{Deserialize, Serialize};
+use serenity::all::{GuildId, UserId};
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::{RwLock, mpsc};
 

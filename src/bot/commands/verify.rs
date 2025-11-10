@@ -1,27 +1,38 @@
-use crate::bot::{Context, Error};
-use crate::state::PendingVerification;
-use poise::serenity_prelude as serenity;
+use crate::bot::Error;
+use crate::state::{AppState, PendingVerification};
 use redis::AsyncCommands;
+use serenity::all::{
+    CommandInteraction, Context, CreateCommand, CreateInteractionResponse,
+    CreateInteractionResponseMessage, CreateMessage, GuildId, UserId,
+};
+use std::sync::Arc;
 use uuid::Uuid;
 
 use super::utils::get_verified_role_id;
 
-/// Verify your Andrew ID
-#[poise::command(slash_command)]
-pub async fn verify(ctx: Context<'_>) -> Result<(), Error> {
-    let state = ctx.data();
-    let user = ctx.author();
+/// Register the verify command
+pub fn register() -> CreateCommand<'static> {
+    CreateCommand::new("verify").description("Verify your Andrew ID")
+}
+
+/// Handle the verify command
+pub async fn handle(
+    ctx: &Context,
+    command: &CommandInteraction,
+    state: &Arc<AppState>,
+) -> Result<(), Error> {
+    let user = &command.user;
 
     // Get guild_id from context
-    let guild_id = match ctx.guild_id() {
+    let guild_id = match command.guild_id {
         Some(id) => id,
         None => {
-            ctx.send(
-                poise::CreateReply::default()
+            let response = CreateInteractionResponse::Message(
+                CreateInteractionResponseMessage::new()
                     .content("This command can only be used in a server.")
                     .ephemeral(true),
-            )
-            .await?;
+            );
+            command.create_response(&ctx.http, response).await?;
             return Ok(());
         }
     };
@@ -31,18 +42,18 @@ pub async fn verify(ctx: Context<'_>) -> Result<(), Error> {
     let redis_key = format!("discord:{}:keycloak", user.id);
     let existing_keycloak_id: Option<String> = conn.get(&redis_key).await?;
 
-    if let Some(_) = existing_keycloak_id {
+    if existing_keycloak_id.is_some() {
         // Just assign role in this server
-        let verified_role = get_verified_role_id(&ctx.http(), &mut conn, guild_id).await?;
-        let member = guild_id.member(&ctx.http(), user.id).await?;
-        member.add_role(&ctx.http(), verified_role).await?;
+        let verified_role = get_verified_role_id(&ctx.http, &mut conn, guild_id).await?;
+        let member = guild_id.member(&ctx.http, user.id).await?;
+        member.add_role(&ctx.http, verified_role, None).await?;
 
-        ctx.send(
-            poise::CreateReply::default()
+        let response = CreateInteractionResponse::Message(
+            CreateInteractionResponseMessage::new()
                 .content("You are already verified. The verified role has been assigned to you in this server.")
                 .ephemeral(true),
-        )
-        .await?;
+        );
+        command.create_response(&ctx.http, response).await?;
         return Ok(());
     }
 
@@ -52,7 +63,7 @@ pub async fn verify(ctx: Context<'_>) -> Result<(), Error> {
     // Store verification request
     let verification = PendingVerification {
         discord_user_id: user.id,
-        discord_username: user.name.clone(),
+        discord_username: user.name.to_string(),
         guild_id,
         created_at: chrono::Utc::now().timestamp(),
     };
@@ -79,15 +90,15 @@ pub async fn verify(ctx: Context<'_>) -> Result<(), Error> {
     let verify_url = format!("{}/verify?state={}", state.config.app_url, state_token);
 
     // Send ephemeral message
-    ctx.send(
-        poise::CreateReply::default()
+    let response = CreateInteractionResponse::Message(
+        CreateInteractionResponseMessage::new()
             .content(format!(
                 "Click the link below to verify your account. This link expires in 10 minutes.\n\n{}",
                 verify_url
             ))
             .ephemeral(true),
-    )
-    .await?;
+    );
+    command.create_response(&ctx.http, response).await?;
 
     Ok(())
 }
@@ -95,21 +106,21 @@ pub async fn verify(ctx: Context<'_>) -> Result<(), Error> {
 /// Complete the verification process by assigning role and storing mappings
 /// Called by the bot task when it receives a verification completion event
 pub async fn complete_verification(
-    http: &serenity::Http,
-    _cache: &serenity::Cache,
-    state: &crate::state::AppState,
-    discord_user_id: serenity::UserId,
+    http: &serenity::all::Http,
+    _cache: &serenity::all::Cache,
+    state: &AppState,
+    discord_user_id: UserId,
     guild_id: u64,
     keycloak_user_id: String,
 ) -> Result<(), Error> {
-    let guild_id = serenity::GuildId::new(guild_id);
+    let guild_id = GuildId::new(guild_id);
     let member = guild_id.member(http, discord_user_id).await?;
 
     // Find and assign verified role (configured or default "Verified")
     let mut redis = state.redis.clone();
     let verified_role = get_verified_role_id(http, &mut redis, guild_id).await?;
 
-    member.add_role(http, verified_role).await?;
+    member.add_role(http, verified_role, None).await?;
 
     // Store mapping in Redis
     let mut conn = state.redis.clone();
@@ -134,12 +145,10 @@ pub async fn complete_verification(
         .await?;
 
     // DM the user
-    let dm_channel = discord_user_id.create_dm_channel(http).await?;
-    dm_channel
-        .send_message(
+    discord_user_id
+        .direct_message(
             http,
-            serenity::CreateMessage::default()
-                .content("You have successfully verified your Andrew ID."),
+            CreateMessage::new().content("You have successfully verified your Andrew ID."),
         )
         .await?;
 
