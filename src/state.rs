@@ -192,6 +192,21 @@ impl SetupRolesSession {
 
         // Update positions for kept roles (move them under parent role)
         for (role_key, role_id) in &roles_to_keep {
+            // Check if the role still exists in the guild
+            if !guild.roles.contains_key(role_id) {
+                tracing::warn!(
+                    "Role {} (ID: {}) exists in Redis but not in Discord, skipping",
+                    role_key,
+                    role_id
+                );
+
+                // Clean up stale Redis key
+                let redis_key = format!("guild:{}:role:{}", guild_id, role_key);
+                let _: () = redis.del(&redis_key).await?;
+
+                continue;
+            }
+
             // Update the role's position
             if let Err(e) = guild_id
                 .edit_role(
@@ -201,10 +216,7 @@ impl SetupRolesSession {
                 )
                 .await
             {
-                eprintln!(
-                    "Warning: Failed to update position for role {}: {}",
-                    role_key, e
-                );
+                tracing::warn!("Failed to update position for role {}: {}", role_id, e);
             }
 
             all_roles.push((role_key.clone(), *role_id));

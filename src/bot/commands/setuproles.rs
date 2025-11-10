@@ -5,8 +5,7 @@ use serenity::all::{
     ButtonStyle, CommandInteraction, ComponentInteraction, ComponentInteractionDataKind, Context,
     CreateActionRow, CreateButton, CreateCommand, CreateComponent, CreateContainer,
     CreateInteractionResponse, CreateInteractionResponseMessage, CreateSelectMenu,
-    CreateSelectMenuKind, CreateSelectMenuOption, CreateTextDisplay, Mentionable, MessageFlags,
-    RoleId,
+    CreateSelectMenuKind, CreateSelectMenuOption, CreateTextDisplay, MessageFlags, RoleId,
 };
 use std::sync::Arc;
 
@@ -483,7 +482,7 @@ async fn handle_save_roles(
     // Show success message
     let roles_list = created_roles
         .iter()
-        .map(|(_, role_id)| format!("* {}", role_id.mention()))
+        .map(|(_, role_id)| format!("* <@{}>", role_id))
         .collect::<Vec<_>>()
         .join("\n");
 
