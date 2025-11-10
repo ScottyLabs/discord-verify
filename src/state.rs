@@ -122,12 +122,57 @@ impl SetupRolesSession {
             .get(&parent_role_id)
             .ok_or("Selected parent role not found")?;
 
-        // Get the roles to create
-        let roles_to_create = self.get_roles_to_create();
-        let parent_position = parent_role.position;
-        let mut created_roles = Vec::new();
+        // Get the current mode to determine what roles exist
+        let current_mode_key = format!("guild:{}:role_mode", guild_id);
+        let current_mode: Option<String> = redis.get(&current_mode_key).await?;
+        let current_mode = current_mode.unwrap_or_else(|| "none".to_string());
 
-        // Create each role
+        // Get roles in the old mode and new mode
+        let current_roles = self
+            .get_current_roles(&current_mode, redis, guild_id)
+            .await?;
+        let desired_roles = self.get_roles_to_create();
+
+        let current_role_keys: std::collections::HashSet<_> =
+            current_roles.iter().map(|(key, _)| key.as_str()).collect();
+        let desired_role_keys: std::collections::HashSet<_> =
+            desired_roles.iter().map(|(_, key)| key.as_str()).collect();
+
+        // Roles that exist in both current and desired
+        let roles_to_keep: Vec<_> = current_roles
+            .iter()
+            .filter(|(key, _)| desired_role_keys.contains(key.as_str()))
+            .cloned()
+            .collect();
+
+        // Roles that exist in current but not desired
+        let roles_to_delete: Vec<_> = current_roles
+            .iter()
+            .filter(|(key, _)| !desired_role_keys.contains(key.as_str()))
+            .cloned()
+            .collect();
+
+        // Roles that exist in desired but not current
+        let roles_to_create: Vec<_> = desired_roles
+            .iter()
+            .filter(|(_, key)| !current_role_keys.contains(key.as_str()))
+            .cloned()
+            .collect();
+
+        // Delete old roles and their Redis keys
+        for (role_key, role_id) in &roles_to_delete {
+            if let Err(e) = guild_id.delete_role(http, *role_id, None).await {
+                tracing::warn!("Failed to delete role {}: {}", role_id, e);
+            }
+
+            let redis_key = format!("guild:{}:role:{}", guild_id, role_key);
+            let _: () = redis.del(&redis_key).await?;
+        }
+
+        let parent_position = parent_role.position;
+        let mut all_roles = Vec::new();
+
+        // Create new roles
         for (role_name, role_key) in &roles_to_create {
             let new_role = guild_id
                 .create_role(
@@ -138,18 +183,104 @@ impl SetupRolesSession {
                 )
                 .await?;
 
-            created_roles.push((role_key.clone(), new_role.id));
+            all_roles.push((role_key.clone(), new_role.id));
 
             // Store role ID in Redis
             let redis_key = format!("guild:{}:role:{}", guild_id, role_key);
             let _: () = redis.set(&redis_key, new_role.id.get()).await?;
         }
 
+        // Update positions for kept roles (move them under parent role)
+        for (role_key, role_id) in &roles_to_keep {
+            // Update the role's position
+            if let Err(e) = guild_id
+                .edit_role(
+                    http,
+                    *role_id,
+                    serenity::all::EditRole::new().position((parent_position - 1).max(0) as i16),
+                )
+                .await
+            {
+                eprintln!(
+                    "Warning: Failed to update position for role {}: {}",
+                    role_key, e
+                );
+            }
+
+            all_roles.push((role_key.clone(), *role_id));
+        }
+
         // Save mode in Redis
         let role_mode_key = format!("guild:{}:role_mode", guild_id);
         let _: () = redis.set(&role_mode_key, self.mode.as_str()).await?;
 
-        Ok(created_roles)
+        Ok(all_roles)
+    }
+
+    /// Get currently configured roles based on the old mode
+    async fn get_current_roles(
+        &self,
+        current_mode: &str,
+        redis: &mut ConnectionManager,
+        guild_id: GuildId,
+    ) -> Result<Vec<(String, RoleId)>, Box<dyn std::error::Error + Send + Sync>> {
+        let mut current_roles = Vec::new();
+
+        match current_mode {
+            "levels" => {
+                for level in &["undergrad", "graduate"] {
+                    let key = format!("guild:{}:role:{}", guild_id, level);
+                    if let Ok(Some(role_id_str)) = redis.get::<_, Option<String>>(&key).await {
+                        if let Ok(role_id_u64) = role_id_str.parse::<u64>() {
+                            current_roles.push((level.to_string(), RoleId::new(role_id_u64)));
+                        }
+                    }
+                }
+            }
+            "classes" => {
+                for class in &[
+                    "first-year",
+                    "sophomore",
+                    "junior",
+                    "senior",
+                    "fifth-year",
+                    "masters",
+                    "doctoral",
+                ] {
+                    let key = format!("guild:{}:role:{}", guild_id, class);
+                    if let Ok(Some(role_id_str)) = redis.get::<_, Option<String>>(&key).await {
+                        if let Ok(role_id_u64) = role_id_str.parse::<u64>() {
+                            current_roles.push((class.to_string(), RoleId::new(role_id_u64)));
+                        }
+                    }
+                }
+            }
+            "custom" => {
+                // For custom mode, check all possible roles
+                let all_possible = vec![
+                    "undergrad",
+                    "graduate",
+                    "first-year",
+                    "sophomore",
+                    "junior",
+                    "senior",
+                    "fifth-year",
+                    "masters",
+                    "doctoral",
+                ];
+                for role_key in all_possible {
+                    let key = format!("guild:{}:role:{}", guild_id, role_key);
+                    if let Ok(Some(role_id_str)) = redis.get::<_, Option<String>>(&key).await {
+                        if let Ok(role_id_u64) = role_id_str.parse::<u64>() {
+                            current_roles.push((role_key.to_string(), RoleId::new(role_id_u64)));
+                        }
+                    }
+                }
+            }
+            _ => {} // "none" or unknown mode has no roles
+        }
+
+        Ok(current_roles)
     }
 }
 
