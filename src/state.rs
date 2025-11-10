@@ -95,7 +95,7 @@ impl SetupRolesSession {
                                 "doctoral" => "Doctoral".to_string(),
                                 _ => return None,
                             };
-                            Some((display_name, s.clone()))
+                            Some((display_name, parts[1].to_string()))
                         } else {
                             None
                         }
