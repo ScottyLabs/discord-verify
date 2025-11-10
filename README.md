@@ -21,7 +21,7 @@ guild:{guild_id}:custom_levels                -> set (enabled level names)
 guild:{guild_id}:custom_classes               -> set (enabled class names)
 
 # User Verification Mappings
-discord:{discord_id}:keycloak                 -> string (keycloak_user_id)
+discord:{discord_id}:keycloak                 -> string (keycloak_id)
 discord:{discord_id}:verified_at              -> string (unix_timestamp)
 keycloak:{keycloak_id}:discord                -> string (discord_id)
 
