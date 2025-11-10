@@ -8,7 +8,7 @@ use serenity::all::{
 };
 use std::sync::Arc;
 
-use super::utils::{get_verified_role_id, is_admin};
+use super::utils::{is_admin, load_guild_role_config};
 
 /// Register the unverify command
 pub fn register() -> CreateCommand<'static> {
@@ -108,9 +108,11 @@ pub async fn handle(
     // Remove verified role
     let member = guild_id.member(&ctx.http, target_user.id).await?;
 
-    if let Ok(verified_role) = get_verified_role_id(&ctx.http, &mut conn, guild_id).await {
-        if member.roles.contains(&verified_role) {
-            member.remove_role(&ctx.http, verified_role, None).await?;
+    if let Ok(role_config) = load_guild_role_config(&ctx.http, &mut conn, guild_id).await {
+        if let Ok(verified_role) = role_config.get_verified_role() {
+            if member.roles.contains(&verified_role) {
+                member.remove_role(&ctx.http, verified_role, None).await?;
+            }
         }
     }
 

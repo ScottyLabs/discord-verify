@@ -1,4 +1,5 @@
 pub mod config;
+pub mod setuproles;
 pub mod setverifiedrole;
 pub mod unverify;
 pub mod userinfo;
@@ -15,6 +16,7 @@ pub async fn register_commands(ctx: &Context) -> Result<(), Error> {
         unverify::register(),
         userinfo::register(),
         setverifiedrole::register(),
+        setuproles::register(),
         config::register(),
     ];
 

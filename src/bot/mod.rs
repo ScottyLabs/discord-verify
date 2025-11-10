@@ -1,4 +1,5 @@
 mod commands;
+pub mod role_config;
 
 use crate::state::{AppState, VerificationComplete};
 use serenity::Client;
@@ -31,37 +32,56 @@ impl EventHandler for Handler {
                 }
             }
             serenity::all::FullEvent::InteractionCreate { interaction, .. } => {
-                if let Interaction::Command(command) = interaction {
-                    let result = match command.data.name.as_str() {
-                        "verify" => commands::verify::handle(ctx, command, &self.state).await,
-                        "unverify" => commands::unverify::handle(ctx, command, &self.state).await,
-                        "userinfo" => commands::userinfo::handle(ctx, command, &self.state).await,
-                        "setverifiedrole" => {
-                            commands::setverifiedrole::handle(ctx, command, &self.state).await
-                        }
-                        "config" => commands::config::handle(ctx, command, &self.state).await,
-                        _ => {
-                            tracing::warn!("Unknown command: {}", command.data.name);
-                            Ok(())
-                        }
-                    };
+                match interaction {
+                    Interaction::Command(command) => {
+                        let result = match command.data.name.as_str() {
+                            "verify" => commands::verify::handle(ctx, command, &self.state).await,
+                            "unverify" => {
+                                commands::unverify::handle(ctx, command, &self.state).await
+                            }
+                            "userinfo" => {
+                                commands::userinfo::handle(ctx, command, &self.state).await
+                            }
+                            "setverifiedrole" => {
+                                commands::setverifiedrole::handle(ctx, command, &self.state).await
+                            }
+                            "setuproles" => {
+                                commands::setuproles::handle(ctx, command, &self.state).await
+                            }
+                            "config" => commands::config::handle(ctx, command, &self.state).await,
+                            _ => {
+                                tracing::warn!("Unknown command: {}", command.data.name);
+                                Ok(())
+                            }
+                        };
 
-                    if let Err(e) = result {
-                        tracing::error!("Error handling command {}: {}", command.data.name, e);
+                        if let Err(e) = result {
+                            tracing::error!("Error handling command {}: {}", command.data.name, e);
 
-                        // Try to send an error message to the user
-                        let error_response = CreateInteractionResponse::Message(
-                            CreateInteractionResponseMessage::new()
-                                .content(format!("An error occurred: {}", e))
-                                .ephemeral(true),
-                        );
+                            // Try to send an error message to the user
+                            let error_response = CreateInteractionResponse::Message(
+                                CreateInteractionResponseMessage::new()
+                                    .content(format!("An error occurred: {}", e))
+                                    .ephemeral(true),
+                            );
 
-                        if let Err(respond_err) =
-                            command.create_response(&ctx.http, error_response).await
-                        {
-                            tracing::error!("Failed to send error response: {}", respond_err);
+                            if let Err(respond_err) =
+                                command.create_response(&ctx.http, error_response).await
+                            {
+                                tracing::error!("Failed to send error response: {}", respond_err);
+                            }
                         }
                     }
+                    Interaction::Component(component) => {
+                        let result =
+                            commands::setuproles::handle_component(ctx, component, &self.state)
+                                .await;
+
+                        if let Err(e) = result {
+                            tracing::error!("Error handling component interaction: {}", e);
+                        }
+                    }
+                    _ => {}
                 }
             }
             _ => {}

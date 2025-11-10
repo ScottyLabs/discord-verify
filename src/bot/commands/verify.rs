@@ -8,7 +8,7 @@ use serenity::all::{
 use std::sync::Arc;
 use uuid::Uuid;
 
-use super::utils::get_verified_role_id;
+use super::utils::load_guild_role_config;
 
 /// Register the verify command
 pub fn register() -> CreateCommand<'static> {
@@ -44,7 +44,8 @@ pub async fn handle(
 
     if existing_keycloak_id.is_some() {
         // Just assign role in this server
-        let verified_role = get_verified_role_id(&ctx.http, &mut conn, guild_id).await?;
+        let role_config = load_guild_role_config(&ctx.http, &mut conn, guild_id).await?;
+        let verified_role = role_config.get_verified_role()?;
         let member = guild_id.member(&ctx.http, user.id).await?;
         member.add_role(&ctx.http, verified_role, None).await?;
 
@@ -116,11 +117,45 @@ pub async fn complete_verification(
     let guild_id = GuildId::new(guild_id);
     let member = guild_id.member(http, discord_user_id).await?;
 
-    // Find and assign verified role (configured or default "Verified")
+    // Load the guild's role configuration
     let mut redis = state.redis.clone();
-    let verified_role = get_verified_role_id(http, &mut redis, guild_id).await?;
+    let role_config = load_guild_role_config(http, &mut redis, guild_id).await?;
 
+    // Assign verified role
+    let verified_role = role_config.get_verified_role()?;
     member.add_role(http, verified_role, None).await?;
+
+    // Fetch Keycloak user to get attributes
+    let keycloak_user = state.keycloak.get_user(&keycloak_user_id).await?;
+
+    // Assign additional roles based on mode and user attributes
+    if let Some(attrs) = keycloak_user.attributes.as_ref() {
+        // Try to assign level-based role
+        if role_config.should_assign_level_roles() {
+            if let Some(level_values) = attrs.get("level") {
+                if let Some(level) = level_values.first() {
+                    if let Some(level_role) = role_config.get_level_role(level) {
+                        if let Err(e) = member.add_role(http, level_role, None).await {
+                            tracing::warn!("Failed to assign level role {}: {}", level, e);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Try to assign class-based role
+        if role_config.should_assign_class_roles() {
+            if let Some(class_values) = attrs.get("class") {
+                if let Some(class) = class_values.first() {
+                    if let Some(class_role) = role_config.get_class_role(class) {
+                        if let Err(e) = member.add_role(http, class_role, None).await {
+                            tracing::warn!("Failed to assign class role {}: {}", class, e);
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     // Store mapping in Redis
     let mut conn = state.redis.clone();

@@ -2,8 +2,9 @@ use crate::bot::Error;
 use crate::state::AppState;
 use redis::AsyncCommands;
 use serenity::all::{
-    Colour, CommandInteraction, Context, CreateCommand, CreateEmbed, CreateEmbedFooter,
-    CreateInteractionResponse, CreateInteractionResponseMessage, Mentionable, RoleId,
+    CommandInteraction, Context, CreateCommand, CreateComponent, CreateContainer,
+    CreateInteractionResponse, CreateInteractionResponseMessage, CreateTextDisplay, Mentionable,
+    MessageFlags, RoleId,
 };
 use std::sync::Arc;
 
@@ -86,7 +87,7 @@ pub async fn handle(
                 "Invalid configuration".to_string()
             }
         }
-        None => "Not configured (use /setverifiedrole)".to_string(),
+        None => "Not configured (use `/setverifiedrole`)".to_string(),
     };
 
     // Count verified users
@@ -107,27 +108,45 @@ pub async fn handle(
 
     let progress_bar = generate_progress_bar(verified_count, total_members, 20);
 
-    let embed = CreateEmbed::new()
-        .title("Server Configuration")
-        .field("Verified Role", role_info, false)
-        .field(
-            "Statistics",
-            format!(
-                "Verified Users: {}/{} (total includes bots)\n{}",
-                verified_count, total_members, progress_bar
-            ),
-            false,
-        )
-        .colour(Colour::BLUE)
-        .footer(CreateEmbedFooter::new(format!(
-            "{} users still need to verify",
+    // Get role mode
+    let role_mode_key = format!("guild:{}:role_mode", guild_id);
+    let role_mode: Option<String> = conn.get(&role_mode_key).await?;
+    let role_mode = role_mode.unwrap_or_else(|| "none".to_string());
+
+    let mode_description = match role_mode.as_str() {
+        "levels" => "* **Levels Mode** (assigning roles based on Undergrad/Graduate status)",
+        "classes" => {
+            "* **Classes Mode** (assigning roles based on class year, First-Year through Doctoral)"
+        }
+        "custom" => "* **Custom Mode** (assigning roles based on selected levels and classes)",
+        _ => "* **None** (only the verified role is being assigned)",
+    };
+
+    // Create components v2 message
+    let container = CreateContainer::new(vec![
+        CreateComponent::TextDisplay(CreateTextDisplay::new("# Configuration")),
+        CreateComponent::TextDisplay(CreateTextDisplay::new(format!(
+            "Current verification settings for this server:\n{}",
+            mode_description
+        ))),
+        CreateComponent::TextDisplay(CreateTextDisplay::new(format!(
+            "* **Verified Role:** {}",
+            role_info
+        ))),
+        CreateComponent::TextDisplay(CreateTextDisplay::new(format!(
+            "Verified Users: {}/{} (total includes bots)\n{}\n\
+            {} users still need to verify • Use `/setuproles` to change mode",
+            verified_count,
+            total_members,
+            progress_bar,
             total_members.saturating_sub(verified_count)
-        )));
+        ))),
+    ]);
 
     let response = CreateInteractionResponse::Message(
         CreateInteractionResponseMessage::new()
-            .embed(embed)
-            .ephemeral(true),
+            .components(vec![CreateComponent::Container(container)])
+            .flags(MessageFlags::EPHEMERAL | MessageFlags::IS_COMPONENTS_V2),
     );
     command.create_response(&ctx.http, response).await?;
 

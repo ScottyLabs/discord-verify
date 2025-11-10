@@ -1,38 +1,14 @@
 use crate::bot::Error;
-use redis::AsyncCommands;
+use crate::bot::role_config::GuildRoleConfig;
 use serenity::all::{Context, GuildId, Member, Permissions, RoleId, UserId};
 
-/// Helper function to get the configured verified role for a guild.
-/// Returns an error if no role is configured or if the configured role no longer exists.
-pub async fn get_verified_role_id(
+/// Helper function to load the guild's role configuration
+pub async fn load_guild_role_config(
     http: &serenity::all::Http,
     redis: &mut redis::aio::ConnectionManager,
     guild_id: GuildId,
-) -> Result<RoleId, Error> {
-    // Try to get configured role from Redis
-    let redis_key = format!("guild:{}:role:verified", guild_id);
-    let role_id_str: Option<String> = redis.get(&redis_key).await?;
-
-    let role_id_str = role_id_str.ok_or_else(|| {
-        "No verified role configured for this server. Please ask an administrator to run /setverifiedrole first."
-    })?;
-
-    // Parse the stored role ID
-    let role_id_u64 = role_id_str
-        .parse::<u64>()
-        .map_err(|_| "Invalid role ID stored in configuration")?;
-    let role_id = RoleId::new(role_id_u64);
-
-    // Verify the role still exists
-    let roles = guild_id.roles(http).await?;
-    if !roles.contains_key(&role_id) {
-        return Err(
-            "The configured verified role no longer exists. Please ask an administrator to run /setverifiedrole again."
-                .into(),
-        );
-    }
-
-    Ok(role_id)
+) -> Result<GuildRoleConfig, Error> {
+    GuildRoleConfig::load(redis, http, guild_id).await
 }
 
 /// Check if a user has administrator permissions in a guild
