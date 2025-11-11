@@ -3,8 +3,8 @@ use crate::state::AppState;
 use redis::AsyncCommands;
 use serenity::all::{
     CommandInteraction, Context, CreateCommand, CreateComponent, CreateContainer,
-    CreateInteractionResponse, CreateInteractionResponseMessage, CreateTextDisplay, Mentionable,
-    MessageFlags, RoleId,
+    CreateInteractionResponse, CreateInteractionResponseMessage, CreateSeparator,
+    CreateTextDisplay, Mentionable, MessageFlags, RoleId,
 };
 use std::sync::Arc;
 
@@ -129,12 +129,14 @@ pub async fn handle(
             "Current verification settings for this server:\n{}\n* **Verified Role:** {}",
             mode_description, role_info
         ))),
+        CreateComponent::Separator(CreateSeparator::new(true)),
         CreateComponent::TextDisplay(CreateTextDisplay::new(format!(
-            "Verified Users: {}/{} (total includes bots)\n{}\n\n\
-            {} users still need to verify • Use `/setuproles` to change mode",
-            verified_count,
-            total_members,
-            progress_bar,
+            "Verified Users: {}/{} (total includes bots)\n{}",
+            verified_count, total_members, progress_bar
+        ))),
+        CreateComponent::Separator(CreateSeparator::new(true)),
+        CreateComponent::TextDisplay(CreateTextDisplay::new(format!(
+            "{} users still need to verify • Use `/setuproles` to change mode",
             total_members.saturating_sub(verified_count)
         ))),
     ]);
