@@ -5,7 +5,7 @@ use serenity::all::{
     ButtonStyle, CommandInteraction, ComponentInteraction, ComponentInteractionDataKind, Context,
     CreateActionRow, CreateButton, CreateCommand, CreateComponent, CreateContainer,
     CreateInteractionResponse, CreateInteractionResponseMessage, CreateSelectMenu,
-    CreateSelectMenuKind, CreateSelectMenuOption, CreateTextDisplay, MessageFlags, RoleId,
+    CreateSelectMenuKind, CreateSelectMenuOption, CreateTextDisplay, MessageFlags,
 };
 use std::sync::Arc;
 
@@ -110,8 +110,6 @@ pub async fn handle_component(
 
     if custom_id == "role_mode_select" {
         handle_mode_selection(ctx, interaction, state).await
-    } else if custom_id == "parent_role_select" {
-        handle_parent_role_selection(ctx, interaction, state).await
     } else if custom_id == "custom_roles_multiselect" {
         handle_custom_roles_selection(ctx, interaction, state).await
     } else if custom_id.starts_with("save_roles_button:") {
@@ -177,50 +175,16 @@ async fn handle_mode_selection(
         );
     }
 
-    // Get all guild roles and find bot's highest role for filtering
-    let guild = guild_id.to_partial_guild(&ctx.http).await?;
-    let bot_user_id = ctx.cache.current_user().id;
-    let bot_member = guild.id.member(&ctx.http, bot_user_id).await?;
-    let bot_highest_position = bot_member
-        .roles
-        .iter()
-        .filter_map(|role_id| guild.roles.get(role_id))
-        .map(|role| role.position)
-        .max()
-        .unwrap_or(0);
-
-    // Filter roles to those below bot's highest role
-    let everyone_role_id = RoleId::from(guild_id.get());
-    let mut available_roles: Vec<_> = guild
-        .roles
-        .iter()
-        .filter(|role| {
-            role.position < bot_highest_position && !role.managed() && role.id != everyone_role_id // Exclude @everyone
-        })
-        .collect();
-
-    // Sort by position (highest first)
-    available_roles.sort_by(|a, b| b.position.cmp(&a.position));
-
-    // Create role select menu
-    let role_select = CreateSelectMenu::new(
-        "parent_role_select",
-        CreateSelectMenuKind::Role {
-            default_roles: None,
-        },
-    )
-    .placeholder("Select role to create new roles under");
-
     // Determine what roles will be created
     let (mode_name, mode_description, roles_to_create) = match selected_mode {
         "levels" => (
             "Levels Mode",
-            "The following roles will be created under your selected role:\n\n",
+            "The following roles will be created:\n\n",
             vec!["Undergrad", "Graduate"],
         ),
         "classes" => (
             "Classes Mode",
-            "The following roles will be created under your selected role:\n\n",
+            "The following roles will be created:\n\n",
             vec![
                 "First-Year",
                 "Sophomore",
@@ -233,7 +197,7 @@ async fn handle_mode_selection(
         ),
         "custom" => {
             // For custom mode, show a multiselect instead
-            return handle_custom_mode_selection(ctx, interaction, available_roles).await;
+            return handle_custom_mode_selection(ctx, interaction).await;
         }
         _ => return Ok(()),
     };
@@ -254,7 +218,6 @@ async fn handle_mode_selection(
         CreateComponent::TextDisplay(CreateTextDisplay::new(format!("# {}", mode_name))),
         CreateComponent::TextDisplay(CreateTextDisplay::new(mode_description)),
         CreateComponent::TextDisplay(CreateTextDisplay::new(roles_list)),
-        CreateComponent::ActionRow(CreateActionRow::SelectMenu(role_select)),
         CreateComponent::ActionRow(CreateActionRow::Buttons(vec![save_button].into())),
     ]);
 
@@ -272,7 +235,6 @@ async fn handle_mode_selection(
 async fn handle_custom_mode_selection(
     ctx: &Context,
     interaction: &ComponentInteraction,
-    _available_roles: Vec<&serenity::all::Role>,
 ) -> Result<(), Error> {
     // Create multiselect for custom role selection
     let all_possible_roles = vec![
@@ -302,14 +264,6 @@ async fn handle_custom_mode_selection(
     .max_values(9)
     .placeholder("Select which roles to create");
 
-    let role_select = CreateSelectMenu::new(
-        "parent_role_select",
-        CreateSelectMenuKind::Role {
-            default_roles: None,
-        },
-    )
-    .placeholder("Select role to create new roles under");
-
     let save_button = CreateButton::new("save_roles_button:custom")
         .label("Save")
         .style(ButtonStyle::Primary);
@@ -319,7 +273,6 @@ async fn handle_custom_mode_selection(
         CreateComponent::TextDisplay(CreateTextDisplay::new(
             "Select any combination of level-based and class-based roles.",
         )),
-        CreateComponent::ActionRow(CreateActionRow::SelectMenu(role_select)),
         CreateComponent::ActionRow(CreateActionRow::SelectMenu(custom_role_select)),
         CreateComponent::ActionRow(CreateActionRow::Buttons(vec![save_button].into())),
     ]);
@@ -331,39 +284,6 @@ async fn handle_custom_mode_selection(
     );
 
     interaction.create_response(&ctx.http, response).await?;
-    Ok(())
-}
-
-/// Handle parent role selection and store it in the session
-async fn handle_parent_role_selection(
-    ctx: &Context,
-    interaction: &ComponentInteraction,
-    state: &Arc<AppState>,
-) -> Result<(), Error> {
-    let guild_id = match interaction.guild_id {
-        Some(id) => id,
-        None => return Ok(()),
-    };
-
-    // Get selected role
-    let selected_role = match &interaction.data.kind {
-        ComponentInteractionDataKind::RoleSelect { values } => values.first().copied(),
-        _ => None,
-    };
-
-    if let Some(role_id) = selected_role {
-        // Update the session with the parent role
-        let mut sessions = state.setuproles_sessions.write().await;
-        if let Some(session) = sessions.get_mut(&(guild_id, interaction.user.id)) {
-            session.set_parent_role(role_id);
-        }
-
-        // Acknowledge without updating message
-        interaction
-            .create_response(&ctx.http, CreateInteractionResponse::Acknowledge)
-            .await?;
-    }
-
     Ok(())
 }
 

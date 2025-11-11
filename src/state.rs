@@ -24,7 +24,6 @@ pub struct VerificationComplete {
 #[derive(Clone, Debug)]
 pub struct SetupRolesSession {
     pub mode: String,
-    pub parent_role: Option<RoleId>,
     pub custom_roles: Vec<String>,
 }
 
@@ -32,14 +31,8 @@ impl SetupRolesSession {
     pub fn new(mode: String) -> Self {
         Self {
             mode,
-            parent_role: None,
             custom_roles: Vec::new(),
         }
-    }
-
-    /// Update the parent role selection
-    pub fn set_parent_role(&mut self, role_id: RoleId) {
-        self.parent_role = Some(role_id);
     }
 
     /// Update the custom roles selection
@@ -49,10 +42,6 @@ impl SetupRolesSession {
 
     /// Validate that the session has all required data to proceed
     pub fn validate(&self) -> Result<(), &'static str> {
-        if self.parent_role.is_none() {
-            return Err("Please select a parent role before saving.");
-        }
-
         if self.mode == "custom" && self.custom_roles.is_empty() {
             return Err("Please select at least one role to create for custom mode.");
         }
@@ -113,13 +102,7 @@ impl SetupRolesSession {
         guild_id: GuildId,
         redis: &mut ConnectionManager,
     ) -> Result<Vec<(String, RoleId)>, Box<dyn std::error::Error + Send + Sync>> {
-        let parent_role_id = self.parent_role.ok_or("Parent role not set")?;
-
-        // Get guild and validate parent role exists
         let guild = guild_id.to_partial_guild(http).await?;
-        if !guild.roles.contains_key(&parent_role_id) {
-            return Err("Selected parent role not found".into());
-        }
 
         // Get the current mode to determine what roles exist
         let current_mode_key = format!("guild:{}:role_mode", guild_id);
@@ -186,20 +169,34 @@ impl SetupRolesSession {
 
         let mut all_roles = Vec::new();
 
-        // Create all new roles at default position first
+        // Create all new roles
         for (role_name, role_key) in &roles_to_create {
-            let new_role = guild_id
-                .create_role(
-                    http,
-                    serenity::all::EditRole::new().name(role_name.as_str()),
-                )
-                .await?;
+            // Check if a role with this name already exists in the guild
+            let existing_role = guild.roles.iter().find(|r| r.name == *role_name);
 
-            all_roles.push((role_key.clone(), new_role.id));
+            let role_id = if let Some(existing) = existing_role {
+                tracing::info!(
+                    "Role '{}' already exists in Discord (ID: {}), reusing it",
+                    role_name,
+                    existing.id
+                );
+                existing.id
+            } else {
+                // Create the role
+                let new_role = guild_id
+                    .create_role(
+                        http,
+                        serenity::all::EditRole::new().name(role_name.as_str()),
+                    )
+                    .await?;
+                new_role.id
+            };
+
+            all_roles.push((role_key.clone(), role_id));
 
             // Store role ID in Redis
             let redis_key = format!("guild:{}:role:{}", guild_id, role_key);
-            let _: () = redis.set(&redis_key, new_role.id.get()).await?;
+            let _: () = redis.set(&redis_key, role_id.get()).await?;
         }
 
         // Add kept roles to the list
@@ -231,33 +228,6 @@ impl SetupRolesSession {
                 // Role exists, just add it to the list
                 all_roles.push((role_key.clone(), *role_id));
             }
-        }
-
-        // Reposition all roles together by fetching fresh parent position
-        // and moving each role individually below the parent
-        let updated_guild = guild_id.to_partial_guild(http).await?;
-        let updated_parent = updated_guild
-            .roles
-            .get(&parent_role_id)
-            .ok_or("Parent role not found after role operations")?;
-
-        // Position roles in order (start at parent_position - 1 and go down)
-        let mut target_position = updated_parent.position.saturating_sub(1);
-
-        for (_, role_id) in &all_roles {
-            if let Err(e) = guild_id
-                .edit_role(
-                    http,
-                    *role_id,
-                    serenity::all::EditRole::new().position(target_position.max(0) as i16),
-                )
-                .await
-            {
-                tracing::warn!("Failed to set position for role {}: {}", role_id, e);
-            }
-
-            // Next role goes one position lower
-            target_position = target_position.saturating_sub(1);
         }
 
         // Save mode in Redis

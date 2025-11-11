@@ -74,10 +74,35 @@ pub async fn handle(
         }
     };
 
-    // Check if bot can actually assign this role
+    // Check various restrictions on the selected role
     let bot_user_id = ctx.cache.current_user().id;
     let bot_member = guild_id.member(&ctx.http, bot_user_id).await?;
     let guild_roles = guild_id.roles(&ctx.http).await?;
+
+    // Check if it's the @everyone role
+    let everyone_role_id = serenity::all::RoleId::from(guild_id.get());
+    if role.id == everyone_role_id {
+        let response = CreateInteractionResponse::Message(
+            CreateInteractionResponseMessage::new()
+                .content("You cannot set @everyone as the verified role.")
+                .ephemeral(true),
+        );
+        command.create_response(&ctx.http, response).await?;
+        return Ok(());
+    }
+
+    // Check if it's a managed role
+    if role.managed() {
+        let response = CreateInteractionResponse::Message(
+            CreateInteractionResponseMessage::new()
+                .content(
+                    "You cannot use a managed role (bot/integration role) as the verified role.",
+                )
+                .ephemeral(true),
+        );
+        command.create_response(&ctx.http, response).await?;
+        return Ok(());
+    }
 
     // Find bot's highest role position
     let bot_top_role = bot_member
