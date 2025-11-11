@@ -1,6 +1,6 @@
 use crate::bot::Error;
 use redis::AsyncCommands;
-use serenity::all::{GuildId, Http, RoleId};
+use serenity::all::{ChannelId, GuildId, Http, RoleId};
 use std::collections::HashMap;
 use std::str::FromStr;
 
@@ -36,17 +36,18 @@ impl RoleMode {
     }
 }
 
-/// Configuration for all assignable roles in a guild
+/// Configuration for roles/channels in a guild
 #[derive(Debug, Clone)]
-pub struct GuildRoleConfig {
+pub struct GuildConfig {
     pub guild_id: GuildId,
     pub verified_role: Option<RoleId>,
+    pub log_channel: Option<ChannelId>,
     pub mode: RoleMode,
     pub level_roles: HashMap<String, RoleId>,
     pub class_roles: HashMap<String, RoleId>,
 }
 
-impl GuildRoleConfig {
+impl GuildConfig {
     /// Load role configuration from Redis for a guild
     pub async fn load(
         redis: &mut redis::aio::ConnectionManager,
@@ -66,6 +67,12 @@ impl GuildRoleConfig {
             .unwrap_or_else(|| "none".to_string())
             .parse()
             .unwrap_or(RoleMode::None);
+
+        // Get the log channel
+        let log_channel_key = format!("guild:{}:log_channel", guild_id);
+        let log_channel: Option<String> = redis.get(&log_channel_key).await?;
+        let log_channel =
+            log_channel.and_then(|s| s.parse::<u64>().ok().map(|id| ChannelId::new(id)));
 
         // Get level roles
         let mut level_roles = HashMap::new();
@@ -112,6 +119,7 @@ impl GuildRoleConfig {
         Ok(Self {
             guild_id,
             verified_role,
+            log_channel,
             mode,
             level_roles,
             class_roles,
@@ -124,6 +132,11 @@ impl GuildRoleConfig {
             "No verified role configured for this server. Please ask an administrator to run `/setverifiedrole` first."
                 .into()
         })
+    }
+
+    /// Get the log channel if configured
+    pub fn get_log_channel(&self) -> Option<ChannelId> {
+        self.log_channel
     }
 
     /// Get the role for a specific level (e.g., "Undergrad" or "Graduate")

@@ -1,10 +1,9 @@
 use crate::bot::Error;
 use crate::state::AppState;
-use redis::AsyncCommands;
 use serenity::all::{
     CommandInteraction, Context, CreateCommand, CreateComponent, CreateContainer,
     CreateInteractionResponse, CreateInteractionResponseMessage, CreateSeparator,
-    CreateTextDisplay, Mentionable, MessageFlags, RoleId,
+    CreateTextDisplay, Mentionable, MessageFlags,
 };
 use std::sync::Arc;
 
@@ -67,27 +66,50 @@ pub async fn handle(
         return Ok(());
     }
 
-    // Get configured verified role
+    // Load guild role configuration
     let mut conn = state.redis.clone();
-    let redis_key = format!("guild:{}:role:verified", guild_id);
-    let role_id_str: Option<String> = conn.get(&redis_key).await?;
+    let guild_config = super::utils::load_guild_config(&ctx.http, &mut conn, guild_id).await?;
 
-    let role_info = match role_id_str {
-        Some(id_str) => {
-            if let Ok(role_id_u64) = id_str.parse::<u64>() {
-                let role_id = RoleId::new(role_id_u64);
-                let roles = guild_id.roles(&ctx.http).await?;
-
-                if let Some(role) = roles.get(&role_id) {
-                    format!("{} (position: {})", role.mention(), role.position)
-                } else {
-                    "Role deleted".to_string()
-                }
+    // Format verified role info
+    let role_info = match guild_config.verified_role {
+        Some(role_id) => {
+            let roles = guild_id.roles(&ctx.http).await?;
+            if let Some(role) = roles.get(&role_id) {
+                format!("{} (position: {})", role.mention(), role.position)
             } else {
-                "Invalid configuration".to_string()
+                "Role deleted".to_string()
             }
         }
         None => "Not configured (use `/setverifiedrole`)".to_string(),
+    };
+
+    // Format log channel info
+    let log_channel_info = match guild_config.log_channel {
+        Some(channel_id) => {
+            // Check if channel still exists
+            if ctx.http.get_channel(channel_id.into()).await.is_ok() {
+                format!("<#{}>", channel_id)
+            } else {
+                "Channel deleted".to_string()
+            }
+        }
+        None => "Not configured (use `/setlogchannel`)".to_string(),
+    };
+
+    // Format mode description
+    let mode_description = match guild_config.mode {
+        crate::bot::guild_config::RoleMode::Levels => {
+            "* **Levels Mode** (assigning roles based on Undergrad/Graduate status)"
+        }
+        crate::bot::guild_config::RoleMode::Classes => {
+            "* **Classes Mode** (assigning roles based on class year, First-Year through Doctoral)"
+        }
+        crate::bot::guild_config::RoleMode::Custom => {
+            "* **Custom Mode** (assigning roles based on selected levels and classes)"
+        }
+        crate::bot::guild_config::RoleMode::None => {
+            "* **None** (only the verified role is being assigned)"
+        }
     };
 
     // Count verified users
@@ -108,26 +130,12 @@ pub async fn handle(
 
     let progress_bar = generate_progress_bar(verified_count, total_members, 20);
 
-    // Get role mode
-    let role_mode_key = format!("guild:{}:role_mode", guild_id);
-    let role_mode: Option<String> = conn.get(&role_mode_key).await?;
-    let role_mode = role_mode.unwrap_or_else(|| "none".to_string());
-
-    let mode_description = match role_mode.as_str() {
-        "levels" => "* **Levels Mode** (assigning roles based on Undergrad/Graduate status)",
-        "classes" => {
-            "* **Classes Mode** (assigning roles based on class year, First-Year through Doctoral)"
-        }
-        "custom" => "* **Custom Mode** (assigning roles based on selected levels and classes)",
-        _ => "* **None** (only the verified role is being assigned)",
-    };
-
     // Create components v2 message
     let container = CreateContainer::new(vec![
         CreateComponent::TextDisplay(CreateTextDisplay::new("# Configuration")),
         CreateComponent::TextDisplay(CreateTextDisplay::new(format!(
-            "Current verification settings for this server:\n{}\n* **Verified Role:** {}",
-            mode_description, role_info
+            "Current verification settings for this server:\n{}\n* **Verified Role:** {}\n* **Log Channel:** {}",
+            mode_description, role_info, log_channel_info
         ))),
         CreateComponent::Separator(CreateSeparator::new(true)),
         CreateComponent::TextDisplay(CreateTextDisplay::new(format!(

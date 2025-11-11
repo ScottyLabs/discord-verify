@@ -1,5 +1,5 @@
 mod commands;
-pub mod role_config;
+pub mod guild_config;
 
 use crate::state::{AppState, VerificationComplete};
 use serenity::Client;
@@ -44,6 +44,9 @@ impl EventHandler for Handler {
                             }
                             "setverifiedrole" => {
                                 commands::setverifiedrole::handle(ctx, command, &self.state).await
+                            }
+                            "setlogchannel" => {
+                                commands::setlogchannel::handle(ctx, command, &self.state).await
                             }
                             "setuproles" => {
                                 commands::setuproles::handle(ctx, command, &self.state).await

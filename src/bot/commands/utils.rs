@@ -1,14 +1,14 @@
 use crate::bot::Error;
-use crate::bot::role_config::GuildRoleConfig;
+use crate::bot::guild_config::GuildConfig;
 use serenity::all::{Context, GuildId, Member, Permissions, RoleId, UserId};
 
-/// Helper function to load the guild's role configuration
-pub async fn load_guild_role_config(
+/// Helper function to load the guild's configuration
+pub async fn load_guild_config(
     http: &serenity::all::Http,
     redis: &mut redis::aio::ConnectionManager,
     guild_id: GuildId,
-) -> Result<GuildRoleConfig, Error> {
-    GuildRoleConfig::load(redis, http, guild_id).await
+) -> Result<GuildConfig, Error> {
+    GuildConfig::load(redis, http, guild_id).await
 }
 
 /// Check if a user has administrator permissions in a guild

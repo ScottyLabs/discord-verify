@@ -4,6 +4,7 @@
 
 ```diff
 # Guild Configuration
+guild:{guild_id}:log_channel                  -> string (channel_id)
 guild:{guild_id}:role:verified                -> string (role_id)
 guild:{guild_id}:role:level:Undergrad         -> string (role_id)
 guild:{guild_id}:role:level:Graduate          -> string (role_id)

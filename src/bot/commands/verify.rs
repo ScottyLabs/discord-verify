@@ -2,13 +2,13 @@ use crate::bot::Error;
 use crate::state::{AppState, PendingVerification};
 use redis::AsyncCommands;
 use serenity::all::{
-    CommandInteraction, Context, CreateCommand, CreateInteractionResponse,
-    CreateInteractionResponseMessage, CreateMessage, GuildId, UserId,
+    CommandInteraction, Context, CreateCommand, CreateEmbed, CreateInteractionResponse,
+    CreateInteractionResponseMessage, CreateMessage, GuildId, Mentionable, UserId,
 };
 use std::sync::Arc;
 use uuid::Uuid;
 
-use super::utils::load_guild_role_config;
+use super::utils::load_guild_config;
 
 /// Register the verify command
 pub fn register() -> CreateCommand<'static> {
@@ -44,7 +44,7 @@ pub async fn handle(
 
     if existing_keycloak_id.is_some() {
         // Just assign role in this server
-        let role_config = load_guild_role_config(&ctx.http, &mut conn, guild_id).await?;
+        let role_config = load_guild_config(&ctx.http, &mut conn, guild_id).await?;
         let verified_role = role_config.get_verified_role()?;
         let member = guild_id.member(&ctx.http, user.id).await?;
         member.add_role(&ctx.http, verified_role, None).await?;
@@ -119,11 +119,15 @@ pub async fn complete_verification(
 
     // Load the guild's role configuration
     let mut redis = state.redis.clone();
-    let role_config = load_guild_role_config(http, &mut redis, guild_id).await?;
+    let guild_config = load_guild_config(http, &mut redis, guild_id).await?;
+
+    // Track roles that were added for logging
+    let mut added_roles = Vec::new();
 
     // Assign verified role
-    let verified_role = role_config.get_verified_role()?;
+    let verified_role = guild_config.get_verified_role()?;
     member.add_role(http, verified_role, None).await?;
+    added_roles.push(verified_role);
 
     // Fetch Keycloak user to get attributes
     let keycloak_user = state.keycloak.get_user(&keycloak_user_id).await?;
@@ -131,23 +135,29 @@ pub async fn complete_verification(
     // Assign additional roles based on mode and user attributes
     if let Some(attrs) = keycloak_user.attributes.as_ref() {
         // Try to assign level-based role
-        if role_config.should_assign_level_roles()
+        if guild_config.should_assign_level_roles()
             && let Some(level_values) = attrs.get("level")
             && let Some(level) = level_values.first()
-            && let Some(level_role) = role_config.get_level_role(level)
-            && let Err(e) = member.add_role(http, level_role, None).await
+            && let Some(level_role) = guild_config.get_level_role(level)
         {
-            tracing::warn!("Failed to assign level role {}: {}", level, e);
+            if let Err(e) = member.add_role(http, level_role, None).await {
+                tracing::warn!("Failed to assign level role {}: {}", level, e);
+            } else {
+                added_roles.push(level_role);
+            }
         }
 
         // Try to assign class-based role
-        if role_config.should_assign_class_roles()
+        if guild_config.should_assign_class_roles()
             && let Some(class_values) = attrs.get("class")
             && let Some(class) = class_values.first()
-            && let Some(class_role) = role_config.get_class_role(class)
-            && let Err(e) = member.add_role(http, class_role, None).await
+            && let Some(class_role) = guild_config.get_class_role(class)
         {
-            tracing::warn!("Failed to assign class role {}: {}", class, e);
+            if let Err(e) = member.add_role(http, class_role, None).await {
+                tracing::warn!("Failed to assign class role {}: {}", class, e);
+            } else {
+                added_roles.push(class_role);
+            }
         }
     }
 
@@ -172,6 +182,42 @@ pub async fn complete_verification(
         .arg(discord_user_id.to_string())
         .query_async::<()>(&mut conn)
         .await?;
+
+    // Log to log channel if configured
+    if let Some(channel_id) = guild_config.get_log_channel() {
+        // Format roles list
+        let roles_mentions: Vec<String> = added_roles
+            .iter()
+            .map(|role_id| format!("<@&{}>", role_id))
+            .collect();
+        let roles_text = if roles_mentions.is_empty() {
+            "None".to_string()
+        } else {
+            roles_mentions.join(", ")
+        };
+
+        let embed = CreateEmbed::new()
+            .title("User Verified")
+            .color(0xA6E3A1) // Green
+            .field("User", format!("{}", discord_user_id.mention()), false)
+            .field("Roles Added", roles_text, false)
+            .timestamp(chrono::Utc::now());
+
+        if let Err(e) = http
+            .send_message(
+                channel_id.into(),
+                Vec::new(),
+                &CreateMessage::new().embed(embed),
+            )
+            .await
+        {
+            tracing::warn!(
+                "Failed to send verification log to channel {}: {}",
+                channel_id,
+                e
+            );
+        }
+    }
 
     // DM the user
     discord_user_id
