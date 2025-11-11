@@ -58,16 +58,14 @@ pub async fn handle(
     };
 
     // If targeting another user, require administrator permissions
-    if target_user.id != user.id {
-        if !is_admin(ctx, &command.member, guild_id, user.id).await? {
-            let response = CreateInteractionResponse::Message(
-                CreateInteractionResponseMessage::new()
-                    .content("You need administrator permissions to unverify other users.")
-                    .ephemeral(true),
-            );
-            command.create_response(&ctx.http, response).await?;
-            return Ok(());
-        }
+    if target_user.id != user.id && !is_admin(ctx, &command.member, guild_id, user.id).await? {
+        let response = CreateInteractionResponse::Message(
+            CreateInteractionResponseMessage::new()
+                .content("You need administrator permissions to unverify other users.")
+                .ephemeral(true),
+        );
+        command.create_response(&ctx.http, response).await?;
+        return Ok(());
     }
 
     // Look up Keycloak user ID from Redis
@@ -108,12 +106,11 @@ pub async fn handle(
     // Remove verified role
     let member = guild_id.member(&ctx.http, target_user.id).await?;
 
-    if let Ok(role_config) = load_guild_role_config(&ctx.http, &mut conn, guild_id).await {
-        if let Ok(verified_role) = role_config.get_verified_role() {
-            if member.roles.contains(&verified_role) {
-                member.remove_role(&ctx.http, verified_role, None).await?;
-            }
-        }
+    if let Ok(role_config) = load_guild_role_config(&ctx.http, &mut conn, guild_id).await
+        && let Ok(verified_role) = role_config.get_verified_role()
+        && member.roles.contains(&verified_role)
+    {
+        member.remove_role(&ctx.http, verified_role, None).await?;
     }
 
     let response = CreateInteractionResponse::Message(

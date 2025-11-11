@@ -2,6 +2,7 @@ use crate::bot::Error;
 use redis::AsyncCommands;
 use serenity::all::{GuildId, Http, RoleId};
 use std::collections::HashMap;
+use std::str::FromStr;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RoleMode {
@@ -11,16 +12,20 @@ pub enum RoleMode {
     Custom,
 }
 
-impl RoleMode {
-    pub fn from_str(s: &str) -> Self {
-        match s {
+impl FromStr for RoleMode {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
             "levels" => Self::Levels,
             "classes" => Self::Classes,
             "custom" => Self::Custom,
             _ => Self::None,
-        }
+        })
     }
+}
 
+impl RoleMode {
     pub fn as_str(&self) -> &str {
         match self {
             Self::None => "none",
@@ -57,21 +62,24 @@ impl GuildRoleConfig {
         // Get the role mode
         let role_mode_key = format!("guild:{}:role_mode", guild_id);
         let role_mode: Option<String> = redis.get(&role_mode_key).await?;
-        let mode = RoleMode::from_str(&role_mode.unwrap_or_else(|| "none".to_string()));
+        let mode = role_mode
+            .unwrap_or_else(|| "none".to_string())
+            .parse()
+            .unwrap_or(RoleMode::None);
 
         // Get level roles
         let mut level_roles = HashMap::new();
         for level in &["Undergrad", "Graduate"] {
             let key = format!("guild:{}:role:level:{}", guild_id, level);
-            if let Ok(Some(role_id_str)) = redis.get::<_, Option<String>>(&key).await {
-                if let Ok(role_id_u64) = role_id_str.parse::<u64>() {
-                    // Verify the role still exists
-                    let role_id = RoleId::new(role_id_u64);
-                    let roles = guild_id.roles(http).await?;
+            if let Ok(Some(role_id_str)) = redis.get::<_, Option<String>>(&key).await
+                && let Ok(role_id_u64) = role_id_str.parse::<u64>()
+            {
+                // Verify the role still exists
+                let role_id = RoleId::new(role_id_u64);
+                let roles = guild_id.roles(http).await?;
 
-                    if roles.contains_key(&role_id) {
-                        level_roles.insert(level.to_string(), role_id);
-                    }
+                if roles.contains_key(&role_id) {
+                    level_roles.insert(level.to_string(), role_id);
                 }
             }
         }
@@ -88,15 +96,15 @@ impl GuildRoleConfig {
             "Doctoral",
         ] {
             let key = format!("guild:{}:role:class:{}", guild_id, class);
-            if let Ok(Some(role_id_str)) = redis.get::<_, Option<String>>(&key).await {
-                if let Ok(role_id_u64) = role_id_str.parse::<u64>() {
-                    // Verify the role still exists
-                    let role_id = RoleId::new(role_id_u64);
-                    let roles = guild_id.roles(http).await?;
+            if let Ok(Some(role_id_str)) = redis.get::<_, Option<String>>(&key).await
+                && let Ok(role_id_u64) = role_id_str.parse::<u64>()
+            {
+                // Verify the role still exists
+                let role_id = RoleId::new(role_id_u64);
+                let roles = guild_id.roles(http).await?;
 
-                    if roles.contains_key(&role_id) {
-                        class_roles.insert(class.to_string(), role_id);
-                    }
+                if roles.contains_key(&role_id) {
+                    class_roles.insert(class.to_string(), role_id);
                 }
             }
         }

@@ -131,29 +131,23 @@ pub async fn complete_verification(
     // Assign additional roles based on mode and user attributes
     if let Some(attrs) = keycloak_user.attributes.as_ref() {
         // Try to assign level-based role
-        if role_config.should_assign_level_roles() {
-            if let Some(level_values) = attrs.get("level") {
-                if let Some(level) = level_values.first() {
-                    if let Some(level_role) = role_config.get_level_role(level) {
-                        if let Err(e) = member.add_role(http, level_role, None).await {
-                            tracing::warn!("Failed to assign level role {}: {}", level, e);
-                        }
-                    }
-                }
-            }
+        if role_config.should_assign_level_roles()
+            && let Some(level_values) = attrs.get("level")
+            && let Some(level) = level_values.first()
+            && let Some(level_role) = role_config.get_level_role(level)
+            && let Err(e) = member.add_role(http, level_role, None).await
+        {
+            tracing::warn!("Failed to assign level role {}: {}", level, e);
         }
 
         // Try to assign class-based role
-        if role_config.should_assign_class_roles() {
-            if let Some(class_values) = attrs.get("class") {
-                if let Some(class) = class_values.first() {
-                    if let Some(class_role) = role_config.get_class_role(class) {
-                        if let Err(e) = member.add_role(http, class_role, None).await {
-                            tracing::warn!("Failed to assign class role {}: {}", class, e);
-                        }
-                    }
-                }
-            }
+        if role_config.should_assign_class_roles()
+            && let Some(class_values) = attrs.get("class")
+            && let Some(class) = class_values.first()
+            && let Some(class_role) = role_config.get_class_role(class)
+            && let Err(e) = member.add_role(http, class_role, None).await
+        {
+            tracing::warn!("Failed to assign class role {}: {}", class, e);
         }
     }
 
