@@ -53,38 +53,41 @@ impl SetupRolesSession {
     pub fn get_roles_to_create(&self) -> Vec<(String, String)> {
         match self.mode.as_str() {
             "levels" => vec![
-                ("Undergrad".to_string(), "undergrad".to_string()),
-                ("Graduate".to_string(), "graduate".to_string()),
+                ("Undergrad".to_string(), "level:Undergrad".to_string()),
+                ("Graduate".to_string(), "level:Graduate".to_string()),
             ],
             "classes" => vec![
-                ("First-Year".to_string(), "first-year".to_string()),
-                ("Sophomore".to_string(), "sophomore".to_string()),
-                ("Junior".to_string(), "junior".to_string()),
-                ("Senior".to_string(), "senior".to_string()),
-                ("Fifth-Year Senior".to_string(), "fifth-year".to_string()),
-                ("Masters".to_string(), "masters".to_string()),
-                ("Doctoral".to_string(), "doctoral".to_string()),
+                ("First-Year".to_string(), "class:First-Year".to_string()),
+                ("Sophomore".to_string(), "class:Sophomore".to_string()),
+                ("Junior".to_string(), "class:Junior".to_string()),
+                ("Senior".to_string(), "class:Senior".to_string()),
+                (
+                    "Fifth-Year Senior".to_string(),
+                    "class:Fifth-Year Senior".to_string(),
+                ),
+                ("Masters".to_string(), "class:Masters".to_string()),
+                ("Doctoral".to_string(), "class:Doctoral".to_string()),
             ],
             "custom" => {
-                // Map the selections to (display_name, redis_key)
+                // Map the selections to (display_name, redis_key_suffix)
                 self.custom_roles
                     .iter()
                     .filter_map(|s| {
                         let parts: Vec<&str> = s.split(':').collect();
                         if parts.len() == 2 {
-                            let display_name = match parts[1] {
-                                "undergrad" => "Undergrad".to_string(),
-                                "graduate" => "Graduate".to_string(),
-                                "first-year" => "First-Year".to_string(),
-                                "sophomore" => "Sophomore".to_string(),
-                                "junior" => "Junior".to_string(),
-                                "senior" => "Senior".to_string(),
-                                "fifth-year" => "Fifth-Year Senior".to_string(),
-                                "masters" => "Masters".to_string(),
-                                "doctoral" => "Doctoral".to_string(),
+                            let (display_name, redis_suffix) = match parts[1] {
+                                "undergrad" => ("Undergrad", "level:Undergrad"),
+                                "graduate" => ("Graduate", "level:Graduate"),
+                                "first-year" => ("First-Year", "class:First-Year"),
+                                "sophomore" => ("Sophomore", "class:Sophomore"),
+                                "junior" => ("Junior", "class:Junior"),
+                                "senior" => ("Senior", "class:Senior"),
+                                "fifth-year" => ("Fifth-Year Senior", "class:Fifth-Year Senior"),
+                                "masters" => ("Masters", "class:Masters"),
+                                "doctoral" => ("Doctoral", "class:Doctoral"),
                                 _ => return None,
                             };
-                            Some((display_name, parts[1].to_string()))
+                            Some((display_name.to_string(), redis_suffix.to_string()))
                         } else {
                             None
                         }
@@ -248,52 +251,54 @@ impl SetupRolesSession {
 
         match current_mode {
             "levels" => {
-                for level in &["undergrad", "graduate"] {
-                    let key = format!("guild:{}:role:{}", guild_id, level);
-                    if let Ok(Some(role_id_str)) = redis.get::<_, Option<String>>(&key).await {
-                        if let Ok(role_id_u64) = role_id_str.parse::<u64>() {
-                            current_roles.push((level.to_string(), RoleId::new(role_id_u64)));
-                        }
+                for level_name in &["Undergrad", "Graduate"] {
+                    let key = format!("guild:{}:role:level:{}", guild_id, level_name);
+                    if let Ok(Some(role_id_str)) = redis.get::<_, Option<String>>(&key).await
+                        && let Ok(role_id_u64) = role_id_str.parse::<u64>()
+                    {
+                        current_roles
+                            .push((format!("level:{}", level_name), RoleId::new(role_id_u64)));
                     }
                 }
             }
             "classes" => {
-                for class in &[
-                    "first-year",
-                    "sophomore",
-                    "junior",
-                    "senior",
-                    "fifth-year",
-                    "masters",
-                    "doctoral",
+                for class_name in &[
+                    "First-Year",
+                    "Sophomore",
+                    "Junior",
+                    "Senior",
+                    "Fifth-Year Senior",
+                    "Masters",
+                    "Doctoral",
                 ] {
-                    let key = format!("guild:{}:role:{}", guild_id, class);
-                    if let Ok(Some(role_id_str)) = redis.get::<_, Option<String>>(&key).await {
-                        if let Ok(role_id_u64) = role_id_str.parse::<u64>() {
-                            current_roles.push((class.to_string(), RoleId::new(role_id_u64)));
-                        }
+                    let key = format!("guild:{}:role:class:{}", guild_id, class_name);
+                    if let Ok(Some(role_id_str)) = redis.get::<_, Option<String>>(&key).await
+                        && let Ok(role_id_u64) = role_id_str.parse::<u64>()
+                    {
+                        current_roles
+                            .push((format!("class:{}", class_name), RoleId::new(role_id_u64)));
                     }
                 }
             }
             "custom" => {
                 // For custom mode, check all possible roles
                 let all_possible = vec![
-                    "undergrad",
-                    "graduate",
-                    "first-year",
-                    "sophomore",
-                    "junior",
-                    "senior",
-                    "fifth-year",
-                    "masters",
-                    "doctoral",
+                    ("level:Undergrad", "Undergrad"),
+                    ("level:Graduate", "Graduate"),
+                    ("class:First-Year", "First-Year"),
+                    ("class:Sophomore", "Sophomore"),
+                    ("class:Junior", "Junior"),
+                    ("class:Senior", "Senior"),
+                    ("class:Fifth-Year Senior", "Fifth-Year Senior"),
+                    ("class:Masters", "Masters"),
+                    ("class:Doctoral", "Doctoral"),
                 ];
-                for role_key in all_possible {
-                    let key = format!("guild:{}:role:{}", guild_id, role_key);
-                    if let Ok(Some(role_id_str)) = redis.get::<_, Option<String>>(&key).await {
-                        if let Ok(role_id_u64) = role_id_str.parse::<u64>() {
-                            current_roles.push((role_key.to_string(), RoleId::new(role_id_u64)));
-                        }
+                for (redis_suffix, _name) in all_possible {
+                    let key = format!("guild:{}:role:{}", guild_id, redis_suffix);
+                    if let Ok(Some(role_id_str)) = redis.get::<_, Option<String>>(&key).await
+                        && let Ok(role_id_u64) = role_id_str.parse::<u64>()
+                    {
+                        current_roles.push((redis_suffix.to_string(), RoleId::new(role_id_u64)));
                     }
                 }
             }
