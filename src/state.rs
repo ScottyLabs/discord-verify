@@ -132,6 +132,12 @@ impl SetupRolesSession {
             .await?;
         let desired_roles = self.get_roles_to_create();
 
+        // Create a map from role_key to display_name for looking up names
+        let role_key_to_name: std::collections::HashMap<_, _> = desired_roles
+            .iter()
+            .map(|(name, key)| (key.as_str(), name.as_str()))
+            .collect();
+
         let current_role_keys: std::collections::HashSet<_> =
             current_roles.iter().map(|(key, _)| key.as_str()).collect();
         let desired_role_keys: std::collections::HashSet<_> =
@@ -198,22 +204,33 @@ impl SetupRolesSession {
 
         // Add kept roles to the list
         for (role_key, role_id) in &roles_to_keep {
-            // Check if the role still exists in the guild
             if !guild.roles.contains_key(role_id) {
-                tracing::warn!(
-                    "Role {} (ID: {}) exists in Redis but not in Discord, skipping",
+                // Role was manually deleted from Discord but still in Redis, recreate it
+                tracing::info!(
+                    "Role {} (ID: {}) was deleted from Discord, recreating it",
                     role_key,
                     role_id
                 );
 
-                // Clean up stale Redis key
+                // Get the display name for this role
+                let display_name = role_key_to_name
+                    .get(role_key.as_str())
+                    .ok_or(format!("Missing display name for role key: {}", role_key))?;
+
+                // Create the role
+                let new_role = guild_id
+                    .create_role(http, serenity::all::EditRole::new().name(*display_name))
+                    .await?;
+
+                // Update Redis with the new role ID
                 let redis_key = format!("guild:{}:role:{}", guild_id, role_key);
-                let _: () = redis.del(&redis_key).await?;
+                let _: () = redis.set(&redis_key, new_role.id.get()).await?;
 
-                continue;
+                all_roles.push((role_key.clone(), new_role.id));
+            } else {
+                // Role exists, just add it to the list
+                all_roles.push((role_key.clone(), *role_id));
             }
-
-            all_roles.push((role_key.clone(), *role_id));
         }
 
         // Reposition all roles together by fetching fresh parent position
