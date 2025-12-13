@@ -2,6 +2,7 @@ mod commands;
 pub mod guild_config;
 
 use crate::state::{AppState, VerificationComplete};
+use redis::AsyncCommands;
 use serenity::Client;
 use serenity::all::{
     Context, CreateInteractionResponse, CreateInteractionResponseMessage, EventHandler,
@@ -31,6 +32,35 @@ impl EventHandler for Handler {
                     tracing::info!("Successfully registered slash commands");
                 }
             }
+            serenity::all::FullEvent::GuildMemberAddition { new_member, .. } => {
+                // Auto-assign unverified role if configured
+                let guild_id = new_member.guild_id;
+                let mut conn = self.state.redis.clone();
+                let redis_key = format!("guild:{}:role:unverified", guild_id);
+
+                if let Ok(Some(role_id_str)) = conn.get::<_, Option<String>>(&redis_key).await {
+                    if let Ok(role_id_u64) = role_id_str.parse::<u64>() {
+                        let role_id = serenity::all::RoleId::new(role_id_u64);
+
+                        if let Err(e) = new_member.add_role(&ctx.http, role_id, None).await {
+                            tracing::warn!(
+                                "Failed to assign unverified role {} to user {} in guild {}: {}",
+                                role_id,
+                                new_member.user.id,
+                                guild_id,
+                                e
+                            );
+                        } else {
+                            tracing::info!(
+                                "Assigned unverified role {} to user {} in guild {}",
+                                role_id,
+                                new_member.user.id,
+                                guild_id
+                            );
+                        }
+                    }
+                }
+            }
             serenity::all::FullEvent::InteractionCreate { interaction, .. } => {
                 match interaction {
                     Interaction::Command(command) => {
@@ -44,6 +74,9 @@ impl EventHandler for Handler {
                             }
                             "setverifiedrole" => {
                                 commands::setverifiedrole::handle(ctx, command, &self.state).await
+                            }
+                            "setunverifiedrole" => {
+                                commands::setunverifiedrole::handle(ctx, command, &self.state).await
                             }
                             "setlogchannel" => {
                                 commands::setlogchannel::handle(ctx, command, &self.state).await

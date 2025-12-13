@@ -1,5 +1,6 @@
 use crate::bot::Error;
 use crate::state::AppState;
+use redis::AsyncCommands;
 use serenity::all::{
     CommandInteraction, Context, CreateCommand, CreateComponent, CreateContainer,
     CreateInteractionResponse, CreateInteractionResponseMessage, CreateSeparator,
@@ -70,10 +71,12 @@ pub async fn handle(
     let mut conn = state.redis.clone();
     let guild_config = super::utils::load_guild_config(&ctx.http, &mut conn, guild_id).await?;
 
+    // Get guild roles for verified and unverified lookups
+    let roles = guild_id.roles(&ctx.http).await?;
+
     // Format verified role info
-    let role_info = match guild_config.verified_role {
+    let verified_role_info = match guild_config.verified_role {
         Some(role_id) => {
-            let roles = guild_id.roles(&ctx.http).await?;
             if let Some(role) = roles.get(&role_id) {
                 format!("{} (position: {})", role.mention(), role.position)
             } else {
@@ -81,6 +84,23 @@ pub async fn handle(
             }
         }
         None => "Not configured (use `/setverifiedrole`)".to_string(),
+    };
+
+    // Format unverified role info
+    let unverified_redis_key = format!("guild:{}:role:unverified", guild_id);
+    let unverified_role_info: String = if let Ok(Some(role_id_str)) = conn.get::<_, Option<String>>(&unverified_redis_key).await {
+        if let Ok(role_id_u64) = role_id_str.parse::<u64>() {
+            let role_id = serenity::all::RoleId::new(role_id_u64);
+            if let Some(role) = roles.get(&role_id) {
+                format!("{} (position: {})", role.mention(), role.position)
+            } else {
+                "Role deleted".to_string()
+            }
+        } else {
+            "Not configured (use `/setunverifiedrole`)".to_string()
+        }
+    } else {
+        "Not configured (use `/setunverifiedrole`)".to_string()
     };
 
     // Format log channel info
@@ -134,8 +154,8 @@ pub async fn handle(
     let container = CreateContainer::new(vec![
         CreateComponent::TextDisplay(CreateTextDisplay::new("# Configuration")),
         CreateComponent::TextDisplay(CreateTextDisplay::new(format!(
-            "Current verification settings for this server:\n{}\n* **Verified Role:** {}\n* **Log Channel:** {}",
-            mode_description, role_info, log_channel_info
+            "Current verification settings for this server:\n{}\n* **Verified Role:** {}\n* **Unverified Role:** {}\n* **Log Channel:** {}",
+            mode_description, verified_role_info, unverified_role_info, log_channel_info
         ))),
         CreateComponent::Separator(CreateSeparator::new(true)),
         CreateComponent::TextDisplay(CreateTextDisplay::new(format!(

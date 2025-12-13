@@ -124,6 +124,19 @@ pub async fn complete_verification(
     // Track roles that were added for logging
     let mut added_roles = Vec::new();
 
+    // Remove unverified role if configured
+    let unverified_redis_key = format!("guild:{}:role:unverified", guild_id);
+    if let Ok(Some(unverified_role_str)) = redis.get::<_, Option<String>>(&unverified_redis_key).await {
+        if let Ok(unverified_role_id) = unverified_role_str.parse::<u64>() {
+            let unverified_role = serenity::all::RoleId::new(unverified_role_id);
+            if let Err(e) = member.remove_role(http, unverified_role, None).await {
+                tracing::warn!("Failed to remove unverified role: {}", e);
+            } else {
+                tracing::info!("Removed unverified role {} from user {}", unverified_role, discord_user_id);
+            }
+        }
+    }
+
     // Assign verified role
     let verified_role = guild_config.get_verified_role()?;
     member.add_role(http, verified_role, None).await?;
