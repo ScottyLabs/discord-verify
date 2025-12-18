@@ -136,9 +136,9 @@ pub async fn run(
     let completion_state = state.clone();
 
     let mut client = Client::builder(token, intents)
-        .event_handler(Handler {
+        .event_handler(Arc::new(Handler {
             state: state.clone(),
-        })
+        }))
         .await?;
 
     // Get the http client and cache before starting

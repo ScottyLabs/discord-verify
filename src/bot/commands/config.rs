@@ -3,8 +3,8 @@ use crate::state::AppState;
 use redis::AsyncCommands;
 use serenity::all::{
     CommandInteraction, Context, CreateCommand, CreateComponent, CreateContainer,
-    CreateInteractionResponse, CreateInteractionResponseMessage, CreateSeparator,
-    CreateTextDisplay, Mentionable, MessageFlags,
+    CreateContainerComponent, CreateInteractionResponse, CreateInteractionResponseMessage,
+    CreateSeparator, CreateTextDisplay, Mentionable, MessageFlags,
 };
 use std::sync::Arc;
 
@@ -88,20 +88,21 @@ pub async fn handle(
 
     // Format unverified role info
     let unverified_redis_key = format!("guild:{}:role:unverified", guild_id);
-    let unverified_role_info: String = if let Ok(Some(role_id_str)) = conn.get::<_, Option<String>>(&unverified_redis_key).await {
-        if let Ok(role_id_u64) = role_id_str.parse::<u64>() {
-            let role_id = serenity::all::RoleId::new(role_id_u64);
-            if let Some(role) = roles.get(&role_id) {
-                format!("{} (position: {})", role.mention(), role.position)
+    let unverified_role_info: String =
+        if let Ok(Some(role_id_str)) = conn.get::<_, Option<String>>(&unverified_redis_key).await {
+            if let Ok(role_id_u64) = role_id_str.parse::<u64>() {
+                let role_id = serenity::all::RoleId::new(role_id_u64);
+                if let Some(role) = roles.get(&role_id) {
+                    format!("{} (position: {})", role.mention(), role.position)
+                } else {
+                    "Role deleted".to_string()
+                }
             } else {
-                "Role deleted".to_string()
+                "Not configured (use `/setunverifiedrole`)".to_string()
             }
         } else {
             "Not configured (use `/setunverifiedrole`)".to_string()
-        }
-    } else {
-        "Not configured (use `/setunverifiedrole`)".to_string()
-    };
+        };
 
     // Format log channel info
     let log_channel_info = match guild_config.log_channel {
@@ -152,18 +153,18 @@ pub async fn handle(
 
     // Create components v2 message
     let container = CreateContainer::new(vec![
-        CreateComponent::TextDisplay(CreateTextDisplay::new("# Configuration")),
-        CreateComponent::TextDisplay(CreateTextDisplay::new(format!(
+        CreateContainerComponent::TextDisplay(CreateTextDisplay::new("# Configuration")),
+        CreateContainerComponent::TextDisplay(CreateTextDisplay::new(format!(
             "Current verification settings for this server:\n{}\n* **Verified Role:** {}\n* **Unverified Role:** {}\n* **Log Channel:** {}",
             mode_description, verified_role_info, unverified_role_info, log_channel_info
         ))),
-        CreateComponent::Separator(CreateSeparator::new(true)),
-        CreateComponent::TextDisplay(CreateTextDisplay::new(format!(
+        CreateContainerComponent::Separator(CreateSeparator::new(true)),
+        CreateContainerComponent::TextDisplay(CreateTextDisplay::new(format!(
             "Verified Users: {}/{} (total includes bots)\n{}",
             verified_count, total_members, progress_bar
         ))),
-        CreateComponent::Separator(CreateSeparator::new(true)),
-        CreateComponent::TextDisplay(CreateTextDisplay::new(format!(
+        CreateContainerComponent::Separator(CreateSeparator::new(true)),
+        CreateContainerComponent::TextDisplay(CreateTextDisplay::new(format!(
             "{} users still need to verify • Use `/setuproles` to change mode",
             total_members.saturating_sub(verified_count)
         ))),

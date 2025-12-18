@@ -3230,7 +3230,7 @@ dependencies = [
 [[package]]
 name = "serenity"
 version = "0.12.4"
-source = "git+https://github.com/serenity-rs/serenity?branch=next#e801f3a4609d46c09f2c0a6124156a5994bb398a"
+source = "git+https://github.com/serenity-rs/serenity?rev=82756d7fa5782c9efcc86392a783d282e48a6869#82756d7fa5782c9efcc86392a783d282e48a6869"
 dependencies = [
  "aformat",
  "arrayvec",
@@ -3396,9 +3396,9 @@ dependencies = [
 
 [[package]]
 name = "simd-adler32"
-version = "0.3.7"
+version = "0.3.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d66dc143e6b11c1eddc06d5c423cfc97062865baf299914ab64caa38182078fe"
+checksum = "e320a6c5ad31d271ad523dcf3ad13e2767ad8b1cb8f047f75a8aeaf8da139da2"
 
 [[package]]
 name = "slab"

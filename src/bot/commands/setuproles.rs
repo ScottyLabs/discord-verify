@@ -4,8 +4,9 @@ use redis::AsyncCommands;
 use serenity::all::{
     ButtonStyle, CommandInteraction, ComponentInteraction, ComponentInteractionDataKind, Context,
     CreateActionRow, CreateButton, CreateCommand, CreateComponent, CreateContainer,
-    CreateInteractionResponse, CreateInteractionResponseMessage, CreateSelectMenu,
-    CreateSelectMenuKind, CreateSelectMenuOption, CreateTextDisplay, MessageFlags,
+    CreateContainerComponent, CreateInteractionResponse, CreateInteractionResponseMessage,
+    CreateSelectMenu, CreateSelectMenuKind, CreateSelectMenuOption, CreateTextDisplay,
+    MessageFlags,
 };
 use std::sync::Arc;
 
@@ -82,11 +83,11 @@ pub async fn handle(
 
     // Create components v2 message
     let container = CreateContainer::new(vec![
-        CreateComponent::TextDisplay(CreateTextDisplay::new("# Role Config")),
-        CreateComponent::TextDisplay(CreateTextDisplay::new(
+        CreateContainerComponent::TextDisplay(CreateTextDisplay::new("# Role Config")),
+        CreateContainerComponent::TextDisplay(CreateTextDisplay::new(
             "Configure how roles are automatically assigned to users after verification.",
         )),
-        CreateComponent::ActionRow(CreateActionRow::SelectMenu(mode_select)),
+        CreateContainerComponent::ActionRow(CreateActionRow::SelectMenu(mode_select)),
     ]);
 
     let response = CreateInteractionResponse::Message(
@@ -149,8 +150,8 @@ async fn handle_mode_selection(
             .await?;
 
         let container = CreateContainer::new(vec![
-            CreateComponent::TextDisplay(CreateTextDisplay::new("# Mode Updated")),
-            CreateComponent::TextDisplay(CreateTextDisplay::new(
+            CreateContainerComponent::TextDisplay(CreateTextDisplay::new("# Mode Updated")),
+            CreateContainerComponent::TextDisplay(CreateTextDisplay::new(
                 "Role assignment mode has been set to **None**.\n\n\
                 Only the verified role will be assigned to users after verification.",
             )),
@@ -215,10 +216,10 @@ async fn handle_mode_selection(
         .style(ButtonStyle::Primary);
 
     let container = CreateContainer::new(vec![
-        CreateComponent::TextDisplay(CreateTextDisplay::new(format!("# {}", mode_name))),
-        CreateComponent::TextDisplay(CreateTextDisplay::new(mode_description)),
-        CreateComponent::TextDisplay(CreateTextDisplay::new(roles_list)),
-        CreateComponent::ActionRow(CreateActionRow::Buttons(vec![save_button].into())),
+        CreateContainerComponent::TextDisplay(CreateTextDisplay::new(format!("# {}", mode_name))),
+        CreateContainerComponent::TextDisplay(CreateTextDisplay::new(mode_description)),
+        CreateContainerComponent::TextDisplay(CreateTextDisplay::new(roles_list)),
+        CreateContainerComponent::ActionRow(CreateActionRow::Buttons(vec![save_button].into())),
     ]);
 
     let response = CreateInteractionResponse::UpdateMessage(
@@ -269,12 +270,12 @@ async fn handle_custom_mode_selection(
         .style(ButtonStyle::Primary);
 
     let container = CreateContainer::new(vec![
-        CreateComponent::TextDisplay(CreateTextDisplay::new("# Custom Mode")),
-        CreateComponent::TextDisplay(CreateTextDisplay::new(
+        CreateContainerComponent::TextDisplay(CreateTextDisplay::new("# Custom Mode")),
+        CreateContainerComponent::TextDisplay(CreateTextDisplay::new(
             "Select any combination of level-based and class-based roles.",
         )),
-        CreateComponent::ActionRow(CreateActionRow::SelectMenu(custom_role_select)),
-        CreateComponent::ActionRow(CreateActionRow::Buttons(vec![save_button].into())),
+        CreateContainerComponent::ActionRow(CreateActionRow::SelectMenu(custom_role_select)),
+        CreateContainerComponent::ActionRow(CreateActionRow::Buttons(vec![save_button].into())),
     ]);
 
     let response = CreateInteractionResponse::UpdateMessage(
@@ -339,10 +340,11 @@ async fn handle_save_roles(
         Some(s) => s,
         None => {
             // No session found, shouldn't get here
-            let container =
-                CreateContainer::new(vec![CreateComponent::TextDisplay(CreateTextDisplay::new(
+            let container = CreateContainer::new(vec![CreateContainerComponent::TextDisplay(
+                CreateTextDisplay::new(
                     "# Error\n\nSession expired. Please run `/setuproles` again.",
-                ))]);
+                ),
+            )]);
 
             let response = CreateInteractionResponse::UpdateMessage(
                 CreateInteractionResponseMessage::new()
@@ -357,7 +359,7 @@ async fn handle_save_roles(
 
     // Validate the session has all required data
     if let Err(error_msg) = session.validate() {
-        let container = CreateContainer::new(vec![CreateComponent::TextDisplay(
+        let container = CreateContainer::new(vec![CreateContainerComponent::TextDisplay(
             CreateTextDisplay::new(format!("# Error\n\n{}", error_msg)),
         )]);
 
@@ -379,7 +381,7 @@ async fn handle_save_roles(
     {
         Ok(roles) => roles,
         Err(e) => {
-            let container = CreateContainer::new(vec![CreateComponent::TextDisplay(
+            let container = CreateContainer::new(vec![CreateContainerComponent::TextDisplay(
                 CreateTextDisplay::new(format!("# Error\n\n{}", e)),
             )]);
 
@@ -409,8 +411,8 @@ async fn handle_save_roles(
         .join("\n");
 
     let container = CreateContainer::new(vec![
-        CreateComponent::TextDisplay(CreateTextDisplay::new("# Success")),
-        CreateComponent::TextDisplay(CreateTextDisplay::new(format!(
+        CreateContainerComponent::TextDisplay(CreateTextDisplay::new("# Success")),
+        CreateContainerComponent::TextDisplay(CreateTextDisplay::new(format!(
             "The following roles have been created and configured:\n{}\n\
             Users will now automatically receive these roles when they verify.",
             roles_list
