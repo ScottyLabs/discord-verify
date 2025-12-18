@@ -35,8 +35,9 @@
                 "serenity-0.12.4" = "sha256-+/7gCmHF97/7HqJ7pIADCzwRPJ/+LVq9q5reFuz3pTk=";
               };
             };
-            nativeBuildInputs = [ pkgs.pkg-config ];
+            nativeBuildInputs = [ pkgs.pkg-config pkgs.llvmPackages.bintools ];
             buildInputs = [ pkgs.openssl ];
+            RUSTFLAGS = "-Clink-self-contained=-linker";
           };
         });
 
