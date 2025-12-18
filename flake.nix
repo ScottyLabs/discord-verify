@@ -38,6 +38,11 @@
             nativeBuildInputs = [ pkgs.pkg-config pkgs.llvmPackages.bintools ];
             buildInputs = [ pkgs.openssl ];
             RUSTFLAGS = "-Clink-self-contained=-linker";
+
+            # Copy Cargo.toml for Leptos
+            postInstall = ''
+              cp ${./Cargo.toml} $out/Cargo.toml
+            '';
           };
         });
 

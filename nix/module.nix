@@ -37,6 +37,7 @@ in
         Type = "simple";
         User = "discord-verify";
         Group = "discord-verify";
+        WorkingDirectory = "${cfg.package}";
         EnvironmentFile = cfg.environmentFile;
         ExecStart = "${cfg.package}/bin/discord-verify";
         Restart = "on-failure";
