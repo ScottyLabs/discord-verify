@@ -41,7 +41,7 @@ lib-default-features = false
 [dependencies]
 anyhow = "1.0.100"
 axum = { version = "0.8.6", features = ["macros"] }
-axum-oidc = { git = "https://github.com/pfzetto/axum-oidc", branch = "pfzetto" }
+axum-oidc = "=1.0.0-dev-0"
 chrono = "0.4.42"
 dotenvy = "0.15.7"
 keycloak = "26.4.0"

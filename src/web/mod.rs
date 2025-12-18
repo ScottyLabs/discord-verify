@@ -7,8 +7,10 @@ use axum::{
     Router, error_handling::HandleErrorLayer, http::Uri, response::IntoResponse, routing::get,
 };
 use axum_oidc::{
-    EmptyAdditionalClaims, OidcAuthLayer, OidcClient, OidcLoginLayer, error::MiddlewareError,
+    EmptyAdditionalClaims, OidcAuthLayer, OidcClient, OidcLoginLayer,
+    error::MiddlewareError,
     handle_oidc_redirect,
+    openidconnect::{ClientId, ClientSecret, IssuerUrl, Scope},
 };
 use leptos::{config::get_configuration, prelude::provide_context};
 use leptos_axum::{LeptosRoutes, generate_route_list};
@@ -64,19 +66,30 @@ pub async fn serve(state: Arc<AppState>) -> anyhow::Result<()> {
         .layer(OidcLoginLayer::<EmptyAdditionalClaims>::new());
 
     // Initialize OIDC client
+    let scopes = vec![
+        Scope::new("openid".into()),
+        Scope::new("email".into()),
+        Scope::new("profile".into()),
+    ];
+
+    let issuer_url = IssuerUrl::new(format!(
+        "{}/realms/{}",
+        state.config.keycloak_url, state.config.keycloak_realm
+    ))
+    .expect("valid IssuerUrl");
+
     let oidc_client = OidcClient::<EmptyAdditionalClaims>::builder()
         .with_default_http_client()
         .with_redirect_url(
             Uri::try_from(format!("{}/auth/callback", state.config.app_url))
                 .expect("valid APP_URL"),
         )
-        .with_client_id(state.config.keycloak_oidc_client_id.clone())
-        .with_client_secret(state.config.keycloak_oidc_client_secret.clone())
-        .with_scopes(["openid", "email", "profile"].into_iter())
-        .discover(format!(
-            "{}/realms/{}",
-            state.config.keycloak_url, state.config.keycloak_realm
+        .with_client_id(ClientId::new(state.config.keycloak_oidc_client_id.clone()))
+        .with_client_secret(ClientSecret::new(
+            state.config.keycloak_oidc_client_secret.clone(),
         ))
+        .with_scopes(scopes)
+        .discover(issuer_url)
         .await?
         .build();
 
