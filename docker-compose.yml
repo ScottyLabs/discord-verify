@@ -11,23 +11,6 @@ services:
       timeout: 3s
       retries: 3
 
-  app:
-    image: ghcr.io/scottylabs/discord-verify-production:latest
-    env_file: .env
-    container_name: discord-verify-app
-    restart: unless-stopped
-    ports:
-      - "3000:3000"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-    depends_on:
-      redis:
-        condition: service_healthy
-
 volumes:
   redis-data:
     driver: local
