@@ -21,7 +21,7 @@
             cargoLock = {
               lockFile = ./Cargo.lock;
               outputHashes = {
-                "serenity-0.12.4" = "";
+                "serenity-0.12.4" = "sha256-+/7gCmHF97/7HqJ7pIADCzwRPJ/+LVq9q5reFuz3pTk=";
               };
             };
             nativeBuildInputs = [ pkgs.pkg-config ];
