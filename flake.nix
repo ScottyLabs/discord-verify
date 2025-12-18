@@ -18,10 +18,10 @@
       packages = forAllSystems (system:
         let
           pkgs = nixpkgs.legacyPackages.${system};
-          rustToolchain = fenix.packages.${system}.latest.toolchain;
+          toolchain = fenix.packages.${system}.latest.toolchain;
           rustPlatform = pkgs.makeRustPlatform {
-            cargo = rustToolchain.cargo;
-            rustc = rustToolchain.rustc;
+            cargo = toolchain;
+            rustc = toolchain;
           };
         in
         {
