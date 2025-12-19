@@ -42,18 +42,23 @@ pub async fn handle(
     let redis_key = format!("discord:{}:keycloak", user.id);
     let existing_keycloak_id: Option<String> = conn.get(&redis_key).await?;
 
-    if existing_keycloak_id.is_some() {
-        // Just assign role in this server
-        let role_config = load_guild_config(&ctx.http, &mut conn, guild_id).await?;
-        let verified_role = role_config.get_verified_role()?;
-        let member = guild_id.member(&ctx.http, user.id).await?;
-        member.add_role(&ctx.http, verified_role, None).await?;
+    if let Some(keycloak_user_id) = existing_keycloak_id {
+        // User is already verified globally, complete verification in this server
+        complete_verification(
+            &ctx.http,
+            &ctx.cache,
+            state,
+            user.id,
+            guild_id.get(),
+            keycloak_user_id,
+        )
+        .await?;
 
         let response = CreateInteractionResponse::Message(
-            CreateInteractionResponseMessage::new()
-                .content("You are already verified. The verified role has been assigned to you in this server.")
-                .ephemeral(true),
-        );
+        CreateInteractionResponseMessage::new()
+            .content("You are already verified. The verified role has been assigned to you in this server.")
+            .ephemeral(true),
+    );
         command.create_response(&ctx.http, response).await?;
         return Ok(());
     }
@@ -126,13 +131,23 @@ pub async fn complete_verification(
 
     // Remove unverified role if configured
     let unverified_redis_key = format!("guild:{}:role:unverified", guild_id);
-    if let Ok(Some(unverified_role_str)) = redis.get::<_, Option<String>>(&unverified_redis_key).await {
+    if let Ok(Some(unverified_role_str)) =
+        redis.get::<_, Option<String>>(&unverified_redis_key).await
+    {
         if let Ok(unverified_role_id) = unverified_role_str.parse::<u64>() {
             let unverified_role = serenity::all::RoleId::new(unverified_role_id);
-            if let Err(e) = member.remove_role(http, unverified_role, None).await {
+            // Ensure the role is removed even if the cache is stale
+            if let Err(e) = http
+                .remove_member_role(guild_id, discord_user_id, unverified_role, None)
+                .await
+            {
                 tracing::warn!("Failed to remove unverified role: {}", e);
             } else {
-                tracing::info!("Removed unverified role {} from user {}", unverified_role, discord_user_id);
+                tracing::info!(
+                    "Removed unverified role {} from user {}",
+                    unverified_role,
+                    discord_user_id
+                );
             }
         }
     }
