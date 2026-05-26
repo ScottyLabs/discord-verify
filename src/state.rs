@@ -1,6 +1,7 @@
 use redis::{AsyncCommands, Client, aio::ConnectionManager};
 use serde::{Deserialize, Serialize};
 use serenity::all::{GuildId, Http, RoleId, UserId};
+use std::sync::atomic::AtomicBool;
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::{RwLock, mpsc};
 
@@ -19,6 +20,17 @@ pub struct VerificationComplete {
     pub discord_user_id: UserId,
     pub guild_id: GuildId,
     pub keycloak_user_id: String,
+}
+
+// Job sent over the reverify channel, one per batch of users
+#[derive(Clone, Debug)]
+pub struct ReverifyJob {
+    pub guild_id: GuildId,
+    pub users: Vec<VerificationComplete>,
+    pub log_channel: Option<serenity::all::ChannelId>,
+    pub total_users: usize,
+    pub batch_index: usize,
+    pub total_batches: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -316,12 +328,15 @@ pub struct AppState {
     pub verification_tx: mpsc::UnboundedSender<VerificationComplete>,
     pub pending_verifications: Arc<RwLock<HashMap<String, PendingVerification>>>,
     pub setuproles_sessions: Arc<RwLock<HashMap<(GuildId, UserId), SetupRolesSession>>>,
+    pub reverify_tx: mpsc::UnboundedSender<ReverifyJob>,
+    pub reverify_in_progress: Arc<AtomicBool>,
 }
 
 impl AppState {
     pub async fn new(
         config: Config,
         verification_tx: mpsc::UnboundedSender<VerificationComplete>,
+        reverify_tx: mpsc::UnboundedSender<ReverifyJob>,
     ) -> anyhow::Result<Self> {
         let keycloak = KeycloakClient::new(
             &config.keycloak_url,
@@ -341,6 +356,8 @@ impl AppState {
             verification_tx,
             pending_verifications: Arc::new(RwLock::new(HashMap::new())),
             setuproles_sessions: Arc::new(RwLock::new(HashMap::new())),
+            reverify_tx,
+            reverify_in_progress: Arc::new(AtomicBool::new(false)),
         })
     }
 }

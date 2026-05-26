@@ -1,16 +1,18 @@
 mod commands;
 pub mod guild_config;
 
-use crate::state::{AppState, VerificationComplete};
+use crate::state::{AppState, ReverifyJob, VerificationComplete};
 use redis::AsyncCommands;
 use serenity::Client;
 use serenity::all::{
-    Context, CreateInteractionResponse, CreateInteractionResponseMessage, EventHandler,
-    GatewayIntents, Interaction,
+    Context, CreateInteractionResponse, CreateInteractionResponseMessage, CreateMessage,
+    EventHandler, GatewayIntents, Interaction,
 };
 use serenity::async_trait;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use tokio::sync::mpsc;
+use tokio_stream::{self as stream, StreamExt};
 
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
 
@@ -38,26 +40,26 @@ impl EventHandler for Handler {
                 let mut conn = self.state.redis.clone();
                 let redis_key = format!("guild:{}:role:unverified", guild_id);
 
-                if let Ok(Some(role_id_str)) = conn.get::<_, Option<String>>(&redis_key).await {
-                    if let Ok(role_id_u64) = role_id_str.parse::<u64>() {
-                        let role_id = serenity::all::RoleId::new(role_id_u64);
+                if let Ok(Some(role_id_str)) = conn.get::<_, Option<String>>(&redis_key).await
+                    && let Ok(role_id_u64) = role_id_str.parse::<u64>()
+                {
+                    let role_id = serenity::all::RoleId::new(role_id_u64);
 
-                        if let Err(e) = new_member.add_role(&ctx.http, role_id, None).await {
-                            tracing::warn!(
-                                "Failed to assign unverified role {} to user {} in guild {}: {}",
-                                role_id,
-                                new_member.user.id,
-                                guild_id,
-                                e
-                            );
-                        } else {
-                            tracing::info!(
-                                "Assigned unverified role {} to user {} in guild {}",
-                                role_id,
-                                new_member.user.id,
-                                guild_id
-                            );
-                        }
+                    if let Err(e) = new_member.add_role(&ctx.http, role_id, None).await {
+                        tracing::warn!(
+                            "Failed to assign unverified role {} to user {} in guild {}: {}",
+                            role_id,
+                            new_member.user.id,
+                            guild_id,
+                            e
+                        );
+                    } else {
+                        tracing::info!(
+                            "Assigned unverified role {} to user {} in guild {}",
+                            role_id,
+                            new_member.user.id,
+                            guild_id
+                        );
                     }
                 }
             }
@@ -85,6 +87,9 @@ impl EventHandler for Handler {
                                 commands::setuproles::handle(ctx, command, &self.state).await
                             }
                             "config" => commands::config::handle(ctx, command, &self.state).await,
+                            "reverify" => {
+                                commands::reverify::handle(ctx, command, &self.state).await
+                            }
                             _ => {
                                 tracing::warn!("Unknown command: {}", command.data.name);
                                 Ok(())
@@ -128,6 +133,7 @@ impl EventHandler for Handler {
 pub async fn run(
     state: Arc<AppState>,
     mut verification_rx: mpsc::UnboundedReceiver<VerificationComplete>,
+    mut reverify_rx: mpsc::UnboundedReceiver<ReverifyJob>,
 ) -> Result<(), Error> {
     let token = state.config.discord_token.clone().parse()?;
     let intents = GatewayIntents::GUILDS | GatewayIntents::GUILD_MEMBERS;
@@ -182,6 +188,81 @@ pub async fn run(
                 {
                     tracing::error!("Failed to send error DM to user {}: {}", user_id, dm_err);
                 }
+            }
+        }
+    });
+
+    // Spawn task to handle reverify batches
+    let reverify_http = client.http.clone();
+    let reverify_cache = client.cache.clone();
+    let reverify_state = state.clone();
+    tokio::spawn(async move {
+        while let Some(job) = reverify_rx.recv().await {
+            tracing::info!(
+                "Processing reverify batch {}/{} for guild {} ({} users)",
+                job.batch_index,
+                job.total_batches,
+                job.guild_id,
+                job.users.len(),
+            );
+
+            let results = stream::iter(&job.users)
+                .then(|user| async {
+                    let result = commands::verify::complete_verification(
+                        &reverify_http,
+                        &reverify_cache,
+                        &reverify_state,
+                        user.discord_user_id,
+                        user.guild_id.get(),
+                        user.keycloak_user_id.clone(),
+                    )
+                    .await;
+                    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                    result
+                })
+                .collect::<Vec<_>>()
+                .await;
+
+            let succeeded = results.iter().filter(|r| r.is_ok()).count();
+            let failed = results.iter().filter(|r| r.is_err()).count();
+
+            // Post progress update to log channel if configured
+            if let Some(channel_id) = job.log_channel {
+                let is_last_batch = job.batch_index == job.total_batches;
+                let message = if is_last_batch {
+                    format!(
+                        "Reverification complete! Processed all **{}** users.\nSucceeded: {} | Failed: {}",
+                        job.total_users, succeeded, failed
+                    )
+                } else {
+                    format!(
+                        "Reverify batch {}/{} done: {} succeeded, {} failed. ({} total users)",
+                        job.batch_index, job.total_batches, succeeded, failed, job.total_users
+                    )
+                };
+
+                if let Err(e) = reverify_http
+                    .send_message(
+                        channel_id.into(),
+                        Vec::new(),
+                        &CreateMessage::new().content(message),
+                    )
+                    .await
+                {
+                    tracing::warn!("Failed to send reverify progress to log channel: {}", e);
+                }
+
+                // Clear the in-progress flag once the last batch is done
+                if is_last_batch {
+                    reverify_state
+                        .reverify_in_progress
+                        .store(false, Ordering::SeqCst);
+                }
+            } else if job.batch_index == job.total_batches {
+                // No log channel
+                reverify_state
+                    .reverify_in_progress
+                    .store(false, Ordering::SeqCst);
             }
         }
     });

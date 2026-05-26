@@ -1,7 +1,8 @@
 pub mod config;
+pub mod reverify;
 pub mod setlogchannel;
-pub mod setuproles;
 pub mod setunverifiedrole;
+pub mod setuproles;
 pub mod setverifiedrole;
 pub mod unverify;
 pub mod userinfo;
@@ -22,6 +23,7 @@ pub async fn register_commands(ctx: &Context) -> Result<(), Error> {
         setlogchannel::register(),
         setuproles::register(),
         config::register(),
+        reverify::register(),
     ];
 
     Command::set_global_commands(&ctx.http, &commands).await?;

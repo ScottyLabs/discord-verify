@@ -32,8 +32,11 @@ async fn main() -> Result<()> {
     // Create channel for verification completion events
     let (verification_tx, verification_rx) = mpsc::unbounded_channel();
 
+    // Create channel for reverify batch jobs
+    let (reverify_tx, reverify_rx) = mpsc::unbounded_channel();
+
     // Initialize shared state
-    let app_state = Arc::new(AppState::new(config, verification_tx).await?);
+    let app_state = Arc::new(AppState::new(config, verification_tx, reverify_tx).await?);
     tracing::info!("App state created successfully");
 
     // Spawn Discord bot in background
@@ -41,7 +44,7 @@ async fn main() -> Result<()> {
     tokio::spawn(async move {
         tracing::info!("Starting Discord bot...");
 
-        if let Err(e) = bot::run(bot_state, verification_rx).await {
+        if let Err(e) = bot::run(bot_state, verification_rx, reverify_rx).await {
             tracing::error!("Discord bot error: {}", e);
         }
     });

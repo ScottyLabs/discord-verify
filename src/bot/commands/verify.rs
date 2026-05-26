@@ -133,22 +133,21 @@ pub async fn complete_verification(
     let unverified_redis_key = format!("guild:{}:role:unverified", guild_id);
     if let Ok(Some(unverified_role_str)) =
         redis.get::<_, Option<String>>(&unverified_redis_key).await
+        && let Ok(unverified_role_id) = unverified_role_str.parse::<u64>()
     {
-        if let Ok(unverified_role_id) = unverified_role_str.parse::<u64>() {
-            let unverified_role = serenity::all::RoleId::new(unverified_role_id);
-            // Ensure the role is removed even if the cache is stale
-            if let Err(e) = http
-                .remove_member_role(guild_id, discord_user_id, unverified_role, None)
-                .await
-            {
-                tracing::warn!("Failed to remove unverified role: {}", e);
-            } else {
-                tracing::info!(
-                    "Removed unverified role {} from user {}",
-                    unverified_role,
-                    discord_user_id
-                );
-            }
+        let unverified_role = serenity::all::RoleId::new(unverified_role_id);
+        // Ensure the role is removed even if the cache is stale
+        if let Err(e) = http
+            .remove_member_role(guild_id, discord_user_id, unverified_role, None)
+            .await
+        {
+            tracing::warn!("Failed to remove unverified role: {}", e);
+        } else {
+            tracing::info!(
+                "Removed unverified role {} from user {}",
+                unverified_role,
+                discord_user_id
+            );
         }
     }
 
