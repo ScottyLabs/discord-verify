@@ -51,14 +51,15 @@ pub async fn handle(
             user.id,
             guild_id.get(),
             keycloak_user_id,
+            true, // send DM since this is a direct user action
         )
         .await?;
 
         let response = CreateInteractionResponse::Message(
-        CreateInteractionResponseMessage::new()
-            .content("You are already verified. The verified role has been assigned to you in this server.")
-            .ephemeral(true),
-    );
+            CreateInteractionResponseMessage::new()
+                .content("You are already verified. The verified role has been assigned to you in this server.")
+                .ephemeral(true),
+        );
         command.create_response(&ctx.http, response).await?;
         return Ok(());
     }
@@ -110,7 +111,9 @@ pub async fn handle(
 }
 
 /// Complete the verification process by assigning role and storing mappings
-/// Called by the bot task when it receives a verification completion event
+/// Called by the bot task when it receives a verification completion event.
+/// `send_dm` controls whether the user receives a DM on success: pass false
+/// for background jobs like reverify to avoid spamming users.
 pub async fn complete_verification(
     http: &serenity::all::Http,
     _cache: &serenity::all::Cache,
@@ -118,6 +121,7 @@ pub async fn complete_verification(
     discord_user_id: UserId,
     guild_id: u64,
     keycloak_user_id: String,
+    send_dm: bool,
 ) -> Result<(), Error> {
     let guild_id = GuildId::new(guild_id);
     let member = guild_id.member(http, discord_user_id).await?;
@@ -148,6 +152,30 @@ pub async fn complete_verification(
                 unverified_role,
                 discord_user_id
             );
+        }
+    }
+
+    // Remove any existing level roles the member already has before assigning new ones
+    for role_id in member.roles.iter() {
+        if guild_config.level_roles.values().any(|r| r == role_id) {
+            if let Err(e) = http
+                .remove_member_role(guild_id, discord_user_id, *role_id, None)
+                .await
+            {
+                tracing::warn!("Failed to remove old level role {}: {}", role_id, e);
+            }
+        }
+    }
+
+    // Remove any existing class roles the member already has before assigning new ones
+    for role_id in member.roles.iter() {
+        if guild_config.class_roles.values().any(|r| r == role_id) {
+            if let Err(e) = http
+                .remove_member_role(guild_id, discord_user_id, *role_id, None)
+                .await
+            {
+                tracing::warn!("Failed to remove old class role {}: {}", role_id, e);
+            }
         }
     }
 
@@ -246,13 +274,22 @@ pub async fn complete_verification(
         }
     }
 
-    // DM the user
-    discord_user_id
-        .direct_message(
-            http,
-            CreateMessage::new().content("You have successfully verified your Andrew ID."),
-        )
-        .await?;
+    // Only DM the user if requested (skipped during reverify to avoid spam)
+    if send_dm {
+        if let Err(e) = discord_user_id
+            .direct_message(
+                http,
+                CreateMessage::new().content("You have successfully verified your Andrew ID."),
+            )
+            .await
+        {
+            tracing::warn!(
+                "Failed to send verification DM to user {}: {}",
+                discord_user_id,
+                e
+            );
+        }
+    }
 
     Ok(())
 }

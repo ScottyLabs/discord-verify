@@ -27,6 +27,11 @@ impl EventHandler for Handler {
             serenity::all::FullEvent::Ready { data_about_bot, .. } => {
                 tracing::info!("{} is connected!", data_about_bot.user.name);
 
+                // Reset reverify flag in case bot restarted mid-job
+                self.state
+                    .reverify_in_progress
+                    .store(false, Ordering::SeqCst);
+
                 // Register global slash commands
                 if let Err(e) = commands::register_commands(ctx).await {
                     tracing::error!("Failed to register commands: {}", e);
@@ -167,6 +172,7 @@ pub async fn run(
                 completion.discord_user_id,
                 completion.guild_id.get(),
                 completion.keycloak_user_id,
+                true, // send DM — this is a direct user action
             )
             .await
             {
@@ -206,6 +212,7 @@ pub async fn run(
                 job.users.len(),
             );
 
+            // Process all users in the batch with a 500ms delay between each
             let results = stream::iter(&job.users)
                 .then(|user| async {
                     let result = commands::verify::complete_verification(
@@ -215,8 +222,10 @@ pub async fn run(
                         user.discord_user_id,
                         user.guild_id.get(),
                         user.keycloak_user_id.clone(),
+                        false, // do not DM users during reverify to avoid spam
                     )
                     .await;
+                    // Sleep between users to stay well under Discord's rate limit
                     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
                     result
                 })
@@ -259,7 +268,7 @@ pub async fn run(
                         .store(false, Ordering::SeqCst);
                 }
             } else if job.batch_index == job.total_batches {
-                // No log channel
+                // No log channel — still clear the flag when done
                 reverify_state
                     .reverify_in_progress
                     .store(false, Ordering::SeqCst);

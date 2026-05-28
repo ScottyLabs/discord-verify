@@ -2,8 +2,7 @@ use crate::bot::Error;
 use crate::state::{AppState, ReverifyJob, VerificationComplete};
 use redis::AsyncCommands;
 use serenity::all::{
-    CommandInteraction, Context, CreateCommand, CreateInteractionResponse,
-    CreateInteractionResponseMessage,
+    CommandInteraction, Context, CreateCommand, CreateMessage, EditInteractionResponse,
 };
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
@@ -31,24 +30,28 @@ pub async fn handle(
     let guild_id = match command.guild_id {
         Some(id) => id,
         None => {
-            let response = CreateInteractionResponse::Message(
-                CreateInteractionResponseMessage::new()
-                    .content("This command can only be used in a server.")
-                    .ephemeral(true),
-            );
-            command.create_response(&ctx.http, response).await?;
+            command.defer_ephemeral(&ctx.http).await?;
+            command
+                .edit_response(
+                    &ctx.http,
+                    EditInteractionResponse::new()
+                        .content("This command can only be used in a server."),
+                )
+                .await?;
             return Ok(());
         }
     };
 
     // Check if user has administrator permissions
     if !is_admin(ctx, &command.member, guild_id, user.id).await? {
-        let response = CreateInteractionResponse::Message(
-            CreateInteractionResponseMessage::new()
-                .content("You need administrator permissions to run reverification.")
-                .ephemeral(true),
-        );
-        command.create_response(&ctx.http, response).await?;
+        command.defer_ephemeral(&ctx.http).await?;
+        command
+            .edit_response(
+                &ctx.http,
+                EditInteractionResponse::new()
+                    .content("You need administrator permissions to run reverification."),
+            )
+            .await?;
         return Ok(());
     }
 
@@ -58,14 +61,20 @@ pub async fn handle(
         .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
         .is_err()
     {
-        let response = CreateInteractionResponse::Message(
-            CreateInteractionResponseMessage::new()
-                .content("A reverification is already in progress. Please wait for it to finish.")
-                .ephemeral(true),
-        );
-        command.create_response(&ctx.http, response).await?;
+        command.defer_ephemeral(&ctx.http).await?;
+        command
+            .edit_response(
+                &ctx.http,
+                EditInteractionResponse::new().content(
+                    "A reverification is already in progress. Please wait for it to finish.",
+                ),
+            )
+            .await?;
         return Ok(());
     }
+
+    // Defer immediately now that we're past the quick checks
+    command.defer_ephemeral(&ctx.http).await?;
 
     // Load guild config to get log channel
     let mut conn = state.redis.clone();
@@ -82,17 +91,16 @@ pub async fn handle(
     if keys.is_empty() {
         // Clear the flag since we're not actually starting a job
         state.reverify_in_progress.store(false, Ordering::SeqCst);
-
-        let response = CreateInteractionResponse::Message(
-            CreateInteractionResponseMessage::new()
-                .content("No verified users found in this server.")
-                .ephemeral(true),
-        );
-        command.create_response(&ctx.http, response).await?;
+        command
+            .edit_response(
+                &ctx.http,
+                EditInteractionResponse::new().content("No verified users found in this server."),
+            )
+            .await?;
         return Ok(());
     }
 
-    // Build VerificationComplete entries for all verified users in this guild
+    // Build VerificationComplete entries for all verified users
     let mut users = Vec::new();
     for key in &keys {
         // Key format: "discord:{user_id}:keycloak"
@@ -110,14 +118,10 @@ pub async fn handle(
             continue;
         };
 
-        // Only include users who are actually members of this guild
-        let discord_user_id = serenity::all::UserId::new(user_id_u64);
-        if guild_id.member(&ctx.http, discord_user_id).await.is_err() {
-            continue;
-        }
-
+        // Skip the guild membership check here — complete_verification will
+        // fail gracefully if the user isn't in the guild
         users.push(VerificationComplete {
-            discord_user_id,
+            discord_user_id: serenity::all::UserId::new(user_id_u64),
             guild_id,
             keycloak_user_id,
         });
@@ -127,13 +131,12 @@ pub async fn handle(
     if total_users == 0 {
         // Clear the flag since we're not actually starting a job
         state.reverify_in_progress.store(false, Ordering::SeqCst);
-
-        let response = CreateInteractionResponse::Message(
-            CreateInteractionResponseMessage::new()
-                .content("No verified members found in this guild.")
-                .ephemeral(true),
-        );
-        command.create_response(&ctx.http, response).await?;
+        command
+            .edit_response(
+                &ctx.http,
+                EditInteractionResponse::new().content("No verified members found in this guild."),
+            )
+            .await?;
         return Ok(());
     }
 
@@ -159,10 +162,32 @@ pub async fn handle(
         }
     }
 
-    // Progress updates go to the log channel
-    let response = CreateInteractionResponse::Message(
-        CreateInteractionResponseMessage::new()
-            .content(format!(
+    // Send start message to log channel if configured
+    if let Some(channel_id) = log_channel {
+        if let Err(e) = ctx
+            .http
+            .send_message(
+                channel_id.into(),
+                Vec::new(),
+                &CreateMessage::new().content(format!(
+                    "Starting reverification for **{}** users across **{}** batches of up to {}.",
+                    total_users, total_batches, REVERIFY_BATCH_SIZE
+                )),
+            )
+            .await
+        {
+            tracing::warn!(
+                "Failed to send reverify start message to log channel: {}",
+                e
+            );
+        }
+    }
+
+    // Respond to the interaction
+    command
+        .edit_response(
+            &ctx.http,
+            EditInteractionResponse::new().content(format!(
                 "Starting reverification for **{}** users across **{}** batches of up to {}.\n{}",
                 total_users,
                 total_batches,
@@ -173,10 +198,9 @@ pub async fn handle(
                         "Configure a log channel with `/setlogchannel` to receive progress updates."
                             .to_string(),
                 }
-            ))
-            .ephemeral(true),
-    );
-    command.create_response(&ctx.http, response).await?;
+            )),
+        )
+        .await?;
 
     Ok(())
 }
