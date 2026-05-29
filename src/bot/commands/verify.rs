@@ -322,11 +322,17 @@ pub async fn complete_verification(
     {
         let issue_text = verification_issues.join("\n");
 
+        let truncated_issue_text: String = if issue_text.chars().count() > 1024 {
+            issue_text.chars().take(1021).collect::<String>() + "..."
+        } else {
+            issue_text
+        };
+
         let embed = CreateEmbed::new()
             .title("Reverification Warning")
             .color(0xF9E2AF) // Yellow
             .field("User", format!("{}", discord_user_id.mention()), false)
-            .field("Issues", issue_text, false)
+            .field("Issues", truncated_issue_text, false)
             .timestamp(chrono::Utc::now());
 
         let _ = http
