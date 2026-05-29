@@ -10,6 +10,8 @@ use uuid::Uuid;
 
 use super::utils::load_guild_config;
 
+use std::collections::HashSet;
+
 /// Register the verify command
 pub fn register() -> CreateCommand<'static> {
     CreateCommand::new("verify").description("Verify your Andrew ID")
@@ -124,7 +126,8 @@ pub async fn complete_verification(
     send_dm: bool,
 ) -> Result<(), Error> {
     let guild_id = GuildId::new(guild_id);
-    let member = guild_id.member(http, discord_user_id).await?;
+
+    let mut verification_issues = Vec::new();
 
     // Load the guild's role configuration
     let mut redis = state.redis.clone();
@@ -146,6 +149,7 @@ pub async fn complete_verification(
             .await
         {
             tracing::warn!("Failed to remove unverified role: {}", e);
+            verification_issues.push(format!("Failed to remove unverified role: {}", e));
         } else {
             tracing::info!(
                 "Removed unverified role {} from user {}",
@@ -155,34 +159,54 @@ pub async fn complete_verification(
         }
     }
 
-    // Remove any existing level roles the member already has before assigning new ones
-    for role_id in member.roles.iter() {
-        if guild_config.level_roles.values().any(|r| r == role_id) {
-            if let Err(e) = http
-                .remove_member_role(guild_id, discord_user_id, *role_id, None)
-                .await
-            {
-                tracing::warn!("Failed to remove old level role {}: {}", role_id, e);
-            }
-        }
-    }
+    // Remove existing level/class roles first
+    let managed_roles: HashSet<serenity::all::RoleId> = guild_config
+        .level_roles
+        .values()
+        .chain(guild_config.class_roles.values())
+        .copied()
+        .collect();
 
-    // Remove any existing class roles the member already has before assigning new ones
-    for role_id in member.roles.iter() {
-        if guild_config.class_roles.values().any(|r| r == role_id) {
-            if let Err(e) = http
-                .remove_member_role(guild_id, discord_user_id, *role_id, None)
-                .await
-            {
-                tracing::warn!("Failed to remove old class role {}: {}", role_id, e);
-            }
+    // Re-fetch member to ensure fresh role state
+    let member = guild_id.member(http, discord_user_id).await?;
+
+    // Find all managed roles currently on the member
+    let roles_to_remove: Vec<serenity::all::RoleId> = member
+        .roles
+        .iter()
+        .filter(|role_id| managed_roles.contains(role_id))
+        .copied()
+        .collect();
+
+    // Remove verification managed roles from member
+    for role_id in roles_to_remove {
+        if let Err(e) = http
+            .remove_member_role(guild_id, discord_user_id, role_id, None)
+            .await
+        {
+            tracing::warn!(
+                "Failed to remove managed role {} from user {}: {}",
+                role_id,
+                discord_user_id,
+                e
+            );
+            verification_issues.push(format!("Failed to remove managed role {}: {}", role_id, e));
+        } else {
+            tracing::info!(
+                "Removed managed role {} from user {}",
+                role_id,
+                discord_user_id
+            );
         }
     }
 
     // Assign verified role
     let verified_role = guild_config.get_verified_role()?;
-    member.add_role(http, verified_role, None).await?;
-    added_roles.push(verified_role);
+    if let Err(e) = member.add_role(http, verified_role, None).await {
+        verification_issues.push(format!("Failed to assign verified role: {}", e));
+    } else {
+        added_roles.push(verified_role);
+    }
 
     // Fetch Keycloak user to get attributes
     let keycloak_user = state.keycloak.get_user(&keycloak_user_id).await?;
@@ -197,6 +221,7 @@ pub async fn complete_verification(
         {
             if let Err(e) = member.add_role(http, level_role, None).await {
                 tracing::warn!("Failed to assign level role {}: {}", level, e);
+                verification_issues.push(format!("Failed to assign level role {}: {}", level, e));
             } else {
                 added_roles.push(level_role);
             }
@@ -210,6 +235,7 @@ pub async fn complete_verification(
         {
             if let Err(e) = member.add_role(http, class_role, None).await {
                 tracing::warn!("Failed to assign class role {}: {}", class, e);
+                verification_issues.push(format!("Failed to assign class role {}: {}", class, e));
             } else {
                 added_roles.push(class_role);
             }
@@ -275,20 +301,41 @@ pub async fn complete_verification(
     }
 
     // Only DM the user if requested (skipped during reverify to avoid spam)
-    if send_dm {
-        if let Err(e) = discord_user_id
+    if send_dm
+        && let Err(e) = discord_user_id
             .direct_message(
                 http,
                 CreateMessage::new().content("You have successfully verified your Andrew ID."),
             )
             .await
-        {
-            tracing::warn!(
-                "Failed to send verification DM to user {}: {}",
-                discord_user_id,
-                e
-            );
-        }
+    {
+        tracing::warn!(
+            "Failed to send verification DM to user {}: {}",
+            discord_user_id,
+            e
+        );
+    }
+
+    // Send logs of any verification issue to the log channel
+    if !verification_issues.is_empty()
+        && let Some(channel_id) = guild_config.get_log_channel()
+    {
+        let issue_text = verification_issues.join("\n");
+
+        let embed = CreateEmbed::new()
+            .title("Reverification Warning")
+            .color(0xF9E2AF) // Yellow
+            .field("User", format!("{}", discord_user_id.mention()), false)
+            .field("Issues", issue_text, false)
+            .timestamp(chrono::Utc::now());
+
+        let _ = http
+            .send_message(
+                channel_id.into(),
+                Vec::new(),
+                &CreateMessage::new().embed(embed),
+            )
+            .await;
     }
 
     Ok(())

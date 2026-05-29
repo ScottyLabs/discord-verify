@@ -2,7 +2,7 @@ use crate::bot::Error;
 use crate::state::{AppState, ReverifyJob, VerificationComplete};
 use redis::AsyncCommands;
 use serenity::all::{
-    CommandInteraction, Context, CreateCommand, CreateMessage, EditInteractionResponse,
+    CommandInteraction, Context, CreateCommand, CreateMessage, EditInteractionResponse, Permissions,
 };
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
@@ -16,6 +16,7 @@ const REVERIFY_BATCH_SIZE: usize = 50;
 pub fn register() -> CreateCommand<'static> {
     CreateCommand::new("reverify")
         .description("Re-run verification for all verified users to sync roles (admin only)")
+        .default_member_permissions(Permissions::ADMINISTRATOR)
 }
 
 /// Handle the reverify command
@@ -163,8 +164,8 @@ pub async fn handle(
     }
 
     // Send start message to log channel if configured
-    if let Some(channel_id) = log_channel {
-        if let Err(e) = ctx
+    if let Some(channel_id) = log_channel
+        && let Err(e) = ctx
             .http
             .send_message(
                 channel_id.into(),
@@ -175,12 +176,11 @@ pub async fn handle(
                 )),
             )
             .await
-        {
-            tracing::warn!(
-                "Failed to send reverify start message to log channel: {}",
-                e
-            );
-        }
+    {
+        tracing::warn!(
+            "Failed to send reverify start message to log channel: {}",
+            e
+        );
     }
 
     // Respond to the interaction
