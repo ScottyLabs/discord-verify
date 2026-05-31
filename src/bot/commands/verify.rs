@@ -200,6 +200,9 @@ pub async fn complete_verification(
         }
     }
 
+    // Re-fetch member to ensure fresh role state
+    let member = guild_id.member(http, discord_user_id).await?;
+
     // Assign verified role
     let verified_role = guild_config.get_verified_role()?;
     if let Err(e) = member.add_role(http, verified_role, None).await {
