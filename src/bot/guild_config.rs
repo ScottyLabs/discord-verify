@@ -54,6 +54,18 @@ impl GuildConfig {
         http: &Http,
         guild_id: GuildId,
     ) -> Result<Self, Error> {
+        let guild_roles = match guild_id.roles(http).await {
+            Ok(roles) => Some(roles),
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to fetch roles for guild {} (continuing with Redis config): {}",
+                    guild_id,
+                    e
+                );
+                None
+            }
+        };
+
         // Get the verified role
         let verified_role_key = format!("guild:{}:role:verified", guild_id);
         let verified_role: Option<String> = redis.get(&verified_role_key).await?;
@@ -81,11 +93,12 @@ impl GuildConfig {
             if let Ok(Some(role_id_str)) = redis.get::<_, Option<String>>(&key).await
                 && let Ok(role_id_u64) = role_id_str.parse::<u64>()
             {
-                // Verify the role still exists
                 let role_id = RoleId::new(role_id_u64);
-                let roles = guild_id.roles(http).await?;
-
-                if roles.contains_key(&role_id) {
+                if let Some(roles) = guild_roles.as_ref() {
+                    if roles.contains_key(&role_id) {
+                        level_roles.insert(level.to_string(), role_id);
+                    }
+                } else {
                     level_roles.insert(level.to_string(), role_id);
                 }
             }
@@ -106,11 +119,12 @@ impl GuildConfig {
             if let Ok(Some(role_id_str)) = redis.get::<_, Option<String>>(&key).await
                 && let Ok(role_id_u64) = role_id_str.parse::<u64>()
             {
-                // Verify the role still exists
                 let role_id = RoleId::new(role_id_u64);
-                let roles = guild_id.roles(http).await?;
-
-                if roles.contains_key(&role_id) {
+                if let Some(roles) = guild_roles.as_ref() {
+                    if roles.contains_key(&role_id) {
+                        class_roles.insert(class.to_string(), role_id);
+                    }
+                } else {
                     class_roles.insert(class.to_string(), role_id);
                 }
             }

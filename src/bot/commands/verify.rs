@@ -3,7 +3,7 @@ use crate::state::{AppState, PendingVerification};
 use redis::AsyncCommands;
 use serenity::all::{
     CommandInteraction, Context, CreateCommand, CreateEmbed, CreateInteractionResponse,
-    CreateInteractionResponseMessage, CreateMessage, GuildId, Mentionable, UserId,
+    CreateInteractionResponseMessage, CreateMessage, GuildId, Mentionable, RoleId, UserId,
 };
 use std::sync::Arc;
 use uuid::Uuid;
@@ -53,7 +53,7 @@ pub async fn handle(
             user.id,
             guild_id.get(),
             keycloak_user_id,
-            true, // send DM since this is a direct user action
+            true,
         )
         .await?;
 
@@ -112,6 +112,19 @@ pub async fn handle(
     Ok(())
 }
 
+/// Formats a Vec of role ids to be a comma separated string with <@&__________>
+fn format_roles(roles: Vec<RoleId>) -> String {
+    let roles_mentions: Vec<String> = roles
+        .iter()
+        .map(|role_id| format!("<@&{}>", role_id))
+        .collect();
+    if roles_mentions.is_empty() {
+        "None".to_string()
+    } else {
+        roles_mentions.join(", ")
+    }
+}
+
 /// Complete the verification process by assigning role and storing mappings
 /// Called by the bot task when it receives a verification completion event.
 /// `send_dm` controls whether the user receives a DM on success: pass false
@@ -133,8 +146,9 @@ pub async fn complete_verification(
     let mut redis = state.redis.clone();
     let guild_config = load_guild_config(http, &mut redis, guild_id).await?;
 
-    // Track roles that were added for logging
+    // Track roles that were added and removed for logging
     let mut added_roles = Vec::new();
+    let mut removed_roles = Vec::new();
 
     // Remove unverified role if configured
     let unverified_redis_key = format!("guild:{}:role:unverified", guild_id);
@@ -151,15 +165,11 @@ pub async fn complete_verification(
             tracing::warn!("Failed to remove unverified role: {}", e);
             verification_issues.push(format!("Failed to remove unverified role: {}", e));
         } else {
-            tracing::info!(
-                "Removed unverified role {} from user {}",
-                unverified_role,
-                discord_user_id
-            );
+            removed_roles.push(unverified_role);
         }
     }
 
-    // Remove existing level/class roles first
+    // Find existing level/class roles to remove first
     let managed_roles: HashSet<serenity::all::RoleId> = guild_config
         .level_roles
         .values()
@@ -168,7 +178,7 @@ pub async fn complete_verification(
         .collect();
 
     // Re-fetch member to ensure fresh role state
-    let member = guild_id.member(http, discord_user_id).await?;
+    let member = http.get_member(guild_id, discord_user_id).await?;
 
     // Find all managed roles currently on the member
     let roles_to_remove: Vec<serenity::all::RoleId> = member
@@ -197,11 +207,12 @@ pub async fn complete_verification(
                 role_id,
                 discord_user_id
             );
+            removed_roles.push(role_id);
         }
     }
 
     // Re-fetch member to ensure fresh role state
-    let member = guild_id.member(http, discord_user_id).await?;
+    let member = http.get_member(guild_id, discord_user_id).await?;
 
     // Assign verified role
     let verified_role = guild_config.get_verified_role()?;
@@ -270,21 +281,13 @@ pub async fn complete_verification(
     // Log to log channel if configured
     if let Some(channel_id) = guild_config.get_log_channel() {
         // Format roles list
-        let roles_mentions: Vec<String> = added_roles
-            .iter()
-            .map(|role_id| format!("<@&{}>", role_id))
-            .collect();
-        let roles_text = if roles_mentions.is_empty() {
-            "None".to_string()
-        } else {
-            roles_mentions.join(", ")
-        };
 
         let embed = CreateEmbed::new()
             .title("User Verified")
             .color(0xA6E3A1) // Green
             .field("User", format!("{}", discord_user_id.mention()), false)
-            .field("Roles Added", roles_text, false)
+            .field("Roles Added", format_roles(added_roles), false)
+            .field("Roles Removed", format_roles(removed_roles), false)
             .timestamp(chrono::Utc::now());
 
         if let Err(e) = http
