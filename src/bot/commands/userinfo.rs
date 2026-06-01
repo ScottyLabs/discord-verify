@@ -4,7 +4,7 @@ use redis::AsyncCommands;
 use serenity::all::{
     Colour, CommandInteraction, CommandOptionType, Context, CreateCommand, CreateCommandOption,
     CreateEmbed, CreateInteractionResponse, CreateInteractionResponseMessage, Mentionable,
-    ResolvedOption, ResolvedValue,
+    Permissions, ResolvedOption, ResolvedValue,
 };
 use std::sync::Arc;
 
@@ -20,6 +20,7 @@ pub fn register() -> CreateCommand<'static> {
             )
             .required(false),
         )
+        .default_member_permissions(Permissions::ADMINISTRATOR)
 }
 
 /// Handle the userinfo command
