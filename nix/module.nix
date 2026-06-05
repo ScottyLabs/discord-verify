@@ -26,7 +26,7 @@ in
       isSystemUser = true;
       group = "discord-verify";
     };
-    users.groups.discord-verify = {};
+    users.groups.discord-verify = { };
 
     systemd.services.discord-verify = {
       description = "Discord Verify Bot";
