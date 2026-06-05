@@ -1,0 +1,8 @@
+inputs:
+  scottylabs:
+    url: git+https://codeberg.org/scottylabs/devenv
+  treefmt-nix:
+    url: github:numtide/treefmt-nix
+
+secretspec:
+  enable: false

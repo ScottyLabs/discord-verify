@@ -1,15 +1,23 @@
 {
   description = "Discord Verify bot";
 
+  nixConfig = {
+    extra-substituters = [ "https://scottylabs.cachix.org" ];
+    extra-trusted-public-keys = [
+      "scottylabs.cachix.org-1:hajjEX5SLi/Y7yYloiXTt2IOr3towcTGRhMh1vu6Tjg="
+    ];
+  };
+
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+    devenv.url = "github:cachix/devenv";
     fenix = {
       url = "github:nix-community/fenix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
-  outputs = { self, nixpkgs, fenix }:
+  outputs = { self, nixpkgs, devenv, fenix, ... }:
     let
       systems = [ "x86_64-linux" "aarch64-linux" ];
       forAllSystems = nixpkgs.lib.genAttrs systems;
@@ -23,9 +31,7 @@
             cargo = toolchain;
             rustc = toolchain;
           };
-        in
-        {
-          default = rustPlatform.buildRustPackage {
+          discord-verify = rustPlatform.buildRustPackage {
             pname = "discord-verify";
             version = "0.1.0";
             src = ./.;
@@ -39,12 +45,17 @@
             buildInputs = [ pkgs.openssl ];
             RUSTFLAGS = "-Clink-self-contained=-linker";
 
-            # Copy Cargo.toml for Leptos
             postInstall = ''
               cp ${./Cargo.toml} $out/Cargo.toml
             '';
           };
-        });
+        in
+        {
+          inherit discord-verify;
+          default = discord-verify;
+          devenv = devenv.packages.${system}.devenv;
+        }
+      );
 
       nixosModules.default = import ./nix/module.nix { inherit self; };
     };

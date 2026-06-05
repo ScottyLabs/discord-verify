@@ -31,7 +31,9 @@ impl Config {
             keycloak_admin_client_secret: dotenvy::var("KEYCLOAK_ADMIN_CLIENT_SECRET")
                 .context("KEYCLOAK_ADMIN_CLIENT_SECRET must be set")?,
             app_url: dotenvy::var("APP_URL").context("APP_URL must be set")?,
-            redis_url: dotenvy::var("REDIS_URL").context("REDIS_URL must be set")?,
+            redis_url: dotenvy::var("VALKEY_URL")
+                .or_else(|_| dotenvy::var("REDIS_URL"))
+                .context("VALKEY_URL or REDIS_URL must be set")?,
         })
     }
 }
