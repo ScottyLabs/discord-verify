@@ -58,6 +58,20 @@ pub async fn handle(
         user
     };
 
+    // Ensure the target user is actually a member of this guild
+    if guild_id.member(&ctx.http, target_user.id).await.is_err() {
+        let response = CreateInteractionResponse::Message(
+            CreateInteractionResponseMessage::new()
+                .content(format!(
+                    "{} is not a member of this server.",
+                    target_user.mention()
+                ))
+                .ephemeral(true),
+        );
+        command.create_response(&ctx.http, response).await?;
+        return Ok(());
+    }
+
     // Look up Keycloak user ID from Redis
     let mut conn = state.redis.clone();
     let redis_key = format!("discord:{}:keycloak", target_user.id);
