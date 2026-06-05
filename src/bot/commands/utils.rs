@@ -1,38 +1,25 @@
 use crate::bot::Error;
 use crate::bot::guild_config::GuildConfig;
-use serenity::all::{
-    Context, GuildId, Http, Member, Permissions, RoleId, UserId, constants::MEMBER_FETCH_LIMIT,
-};
+use serenity::all::{Cache, Context, GuildId, Member, Permissions, RoleId, UserId};
 
-/// Count guild members that currently have the given role (paginated REST lookup).
-pub async fn count_guild_members_with_role(
-    http: &Http,
+/// Count members with a role from the gateway cache (fast; safe for large guilds).
+pub fn count_guild_members_with_role_cached(
     guild_id: GuildId,
+    cache: &Cache,
     role_id: RoleId,
-) -> Result<usize, Error> {
-    let mut count = 0;
-    let mut after: Option<UserId> = None;
+) -> (usize, usize) {
+    let Some(guild) = guild_id.to_guild_cached(cache) else {
+        return (0, 0);
+    };
 
-    loop {
-        let members = http
-            .get_guild_members(guild_id, Some(MEMBER_FETCH_LIMIT), after)
-            .await?;
-        if members.is_empty() {
-            break;
-        }
+    let total = guild.member_count as usize;
+    let verified = guild
+        .members
+        .iter()
+        .filter(|m| m.roles.contains(&role_id))
+        .count();
 
-        count += members
-            .iter()
-            .filter(|m| m.roles.contains(&role_id))
-            .count();
-
-        if members.len() < 1000 {
-            break;
-        }
-        after = members.last().map(|m| m.user.id);
-    }
-
-    Ok(count)
+    (verified, total)
 }
 
 /// Normalize a Redis string value (migration may have left trailing newlines).

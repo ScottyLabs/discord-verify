@@ -4,11 +4,11 @@ use redis::AsyncCommands;
 use serenity::all::{
     CommandInteraction, Context, CreateCommand, CreateComponent, CreateContainer,
     CreateContainerComponent, CreateInteractionResponse, CreateInteractionResponseMessage,
-    CreateSeparator, CreateTextDisplay, Mentionable, MessageFlags,
+    CreateSeparator, CreateTextDisplay, EditInteractionResponse, Mentionable, MessageFlags,
 };
 use std::sync::Arc;
 
-use super::utils::{count_guild_members_with_role, is_admin};
+use super::utils::{count_guild_members_with_role_cached, is_admin};
 
 /// Generate ASCII progress bar
 fn generate_progress_bar(current: usize, total: usize, width: usize) -> String {
@@ -66,6 +66,9 @@ pub async fn handle(
         command.create_response(&ctx.http, response).await?;
         return Ok(());
     }
+
+    // Large guilds need member pagination; defer so Discord doesn't time out the interaction
+    command.defer_ephemeral(&ctx.http).await?;
 
     // Load guild role configuration
     let mut conn = state.redis.clone();
@@ -133,31 +136,38 @@ pub async fn handle(
         }
     };
 
-    // Get total member count from cache
-    let total_members = {
-        let guild_cache = guild_id
-            .to_guild_cached(&ctx.cache)
-            .ok_or("Guild not found in cache")?;
-        guild_cache.member_count as usize
-    };
+    let (verified_count, total_members) = guild_config.verified_role.map_or((0, 0), |role_id| {
+        count_guild_members_with_role_cached(guild_id, &ctx.cache, role_id)
+    });
+
+    let cache_note = guild_id
+        .to_guild_cached(&ctx.cache)
+        .filter(|g| {
+            guild_config.verified_role.is_some() && g.members.len() < g.member_count as usize / 2
+        })
+        .map(|_| "\n*(member cache still loading — count may be low briefly)*");
 
     let verified_stats = match guild_config.verified_role {
-        Some(role_id) => {
-            let verified_count =
-                count_guild_members_with_role(&ctx.http, guild_id, role_id).await?;
+        Some(_) => {
             let progress_bar = generate_progress_bar(verified_count, total_members, 20);
             let remaining = total_members.saturating_sub(verified_count);
             format!(
-                "Verified Users (this server): {verified_count}/{total_members} (total includes bots)\n{progress_bar}\n{remaining} users still need to verify",
+                "Verified Users (this server): {verified_count}/{total_members} (total includes bots)\n{progress_bar}\n{remaining} users still need to verify{cache_note}",
                 verified_count = verified_count,
                 total_members = total_members,
                 progress_bar = progress_bar,
                 remaining = remaining,
+                cache_note = cache_note.unwrap_or(""),
             )
         }
         None => format!(
             "Verified Users: configure a verified role with `/setverifiedrole` to see server statistics ({total_members} members)",
-            total_members = total_members,
+            total_members = total_members.max(
+                guild_id
+                    .to_guild_cached(&ctx.cache)
+                    .map(|g| g.member_count as usize)
+                    .unwrap_or(0),
+            ),
         ),
     };
 
@@ -176,12 +186,14 @@ pub async fn handle(
         )),
     ]);
 
-    let response = CreateInteractionResponse::Message(
-        CreateInteractionResponseMessage::new()
-            .components(vec![CreateComponent::Container(container)])
-            .flags(MessageFlags::EPHEMERAL | MessageFlags::IS_COMPONENTS_V2),
-    );
-    command.create_response(&ctx.http, response).await?;
+    command
+        .edit_response(
+            &ctx.http,
+            EditInteractionResponse::new()
+                .components(vec![CreateComponent::Container(container)])
+                .flags(MessageFlags::IS_COMPONENTS_V2),
+        )
+        .await?;
 
     Ok(())
 }
