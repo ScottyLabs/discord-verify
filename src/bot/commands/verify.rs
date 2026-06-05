@@ -8,7 +8,7 @@ use serenity::all::{
 use std::sync::Arc;
 use uuid::Uuid;
 
-use super::utils::load_guild_config;
+use super::utils::{load_guild_config, trim_redis_value};
 
 use std::collections::HashSet;
 
@@ -42,7 +42,7 @@ pub async fn handle(
     // Check if user is already verified globally
     let mut conn = state.redis.clone();
     let redis_key = format!("discord:{}:keycloak", user.id);
-    let existing_keycloak_id: Option<String> = conn.get(&redis_key).await?;
+    let existing_keycloak_id = trim_redis_value(conn.get(&redis_key).await?);
 
     if let Some(keycloak_user_id) = existing_keycloak_id {
         // User is already verified globally, complete verification in this server

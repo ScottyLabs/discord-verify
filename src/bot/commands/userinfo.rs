@@ -8,6 +8,8 @@ use serenity::all::{
 };
 use std::sync::Arc;
 
+use super::utils::trim_redis_value;
+
 /// Register the userinfo command
 pub fn register() -> CreateCommand<'static> {
     CreateCommand::new("userinfo")
@@ -46,8 +48,7 @@ pub async fn handle(
     let mut conn = state.redis.clone();
     let redis_key = format!("discord:{}:keycloak", target_user.id);
 
-    let keycloak_user_id: Option<String> = conn.get(&redis_key).await?;
-    let keycloak_user_id = match keycloak_user_id {
+    let keycloak_user_id = match trim_redis_value(conn.get(&redis_key).await?) {
         Some(id) => id,
         None => {
             let response = CreateInteractionResponse::Message(

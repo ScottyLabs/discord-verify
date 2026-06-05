@@ -7,7 +7,7 @@ use serenity::all::{
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
-use super::utils::{is_admin, load_guild_config};
+use super::utils::{is_admin, load_guild_config, trim_redis_value};
 
 /// Batch size for reverification to avoid Discord rate limits
 const REVERIFY_BATCH_SIZE: usize = 50;
@@ -114,8 +114,7 @@ pub async fn handle(
             continue;
         };
 
-        let keycloak_id: Option<String> = conn.get(key).await.unwrap_or(None);
-        let Some(keycloak_user_id) = keycloak_id else {
+        let Some(keycloak_user_id) = trim_redis_value(conn.get(key).await.unwrap_or(None)) else {
             continue;
         };
 

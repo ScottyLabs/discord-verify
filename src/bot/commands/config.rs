@@ -8,7 +8,7 @@ use serenity::all::{
 };
 use std::sync::Arc;
 
-use super::utils::is_admin;
+use super::utils::{count_guild_members_with_role, is_admin};
 
 /// Generate ASCII progress bar
 fn generate_progress_bar(current: usize, total: usize, width: usize) -> String {
@@ -16,7 +16,7 @@ fn generate_progress_bar(current: usize, total: usize, width: usize) -> String {
         return format!("[{}] 0%", " ".repeat(width));
     }
 
-    let percentage = (current as f64 / total as f64 * 100.0).round() as usize;
+    let percentage = ((current as f64 / total as f64 * 100.0).min(100.0)).round() as usize;
     let filled = (current as f64 / total as f64 * width as f64).round() as usize;
     let empty = width.saturating_sub(filled);
 
@@ -133,14 +133,6 @@ pub async fn handle(
         }
     };
 
-    // Count verified users
-    let pattern = "discord:*:keycloak".to_string();
-    let keys: Vec<String> = redis::cmd("KEYS")
-        .arg(&pattern)
-        .query_async(&mut conn)
-        .await?;
-    let verified_count = keys.len();
-
     // Get total member count from cache
     let total_members = {
         let guild_cache = guild_id
@@ -149,7 +141,25 @@ pub async fn handle(
         guild_cache.member_count as usize
     };
 
-    let progress_bar = generate_progress_bar(verified_count, total_members, 20);
+    let verified_stats = match guild_config.verified_role {
+        Some(role_id) => {
+            let verified_count =
+                count_guild_members_with_role(&ctx.http, guild_id, role_id).await?;
+            let progress_bar = generate_progress_bar(verified_count, total_members, 20);
+            let remaining = total_members.saturating_sub(verified_count);
+            format!(
+                "Verified Users (this server): {verified_count}/{total_members} (total includes bots)\n{progress_bar}\n{remaining} users still need to verify",
+                verified_count = verified_count,
+                total_members = total_members,
+                progress_bar = progress_bar,
+                remaining = remaining,
+            )
+        }
+        None => format!(
+            "Verified Users: configure a verified role with `/setverifiedrole` to see server statistics ({total_members} members)",
+            total_members = total_members,
+        ),
+    };
 
     // Create components v2 message
     let container = CreateContainer::new(vec![
@@ -159,15 +169,11 @@ pub async fn handle(
             mode_description, verified_role_info, unverified_role_info, log_channel_info
         ))),
         CreateContainerComponent::Separator(CreateSeparator::new(true)),
-        CreateContainerComponent::TextDisplay(CreateTextDisplay::new(format!(
-            "Verified Users: {}/{} (total includes bots)\n{}",
-            verified_count, total_members, progress_bar
-        ))),
+        CreateContainerComponent::TextDisplay(CreateTextDisplay::new(verified_stats)),
         CreateContainerComponent::Separator(CreateSeparator::new(true)),
-        CreateContainerComponent::TextDisplay(CreateTextDisplay::new(format!(
-            "{} users still need to verify • Use `/setuproles` to change mode",
-            total_members.saturating_sub(verified_count)
-        ))),
+        CreateContainerComponent::TextDisplay(CreateTextDisplay::new(
+            "Use `/setuproles` to change mode",
+        )),
     ]);
 
     let response = CreateInteractionResponse::Message(
