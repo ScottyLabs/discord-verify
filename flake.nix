@@ -41,12 +41,17 @@
                 "serenity-0.12.4" = "sha256-+/7gCmHF97/7HqJ7pIADCzwRPJ/+LVq9q5reFuz3pTk=";
               };
             };
-            nativeBuildInputs = [ pkgs.pkg-config pkgs.llvmPackages.bintools ];
+            nativeBuildInputs = [
+              pkgs.pkg-config
+              pkgs.llvmPackages.bintools
+              pkgs.makeWrapper
+            ];
             buildInputs = [ pkgs.openssl ];
             RUSTFLAGS = "-Clink-self-contained=-linker";
 
             postInstall = ''
               cp ${./Cargo.toml} $out/Cargo.toml
+              wrapProgram $out/bin/discord-verify --chdir "$out"
             '';
           };
         in
