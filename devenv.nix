@@ -14,6 +14,10 @@
 
     kennel.services.discord-verify = {
       customDomain = "verify.scottylabs.org";
+      oidc.redirectPaths = [
+        "/auth/callback"
+        "/link-callback"
+      ];
     };
   };
 
