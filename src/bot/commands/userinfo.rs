@@ -33,6 +33,20 @@ pub async fn handle(
 ) -> Result<(), Error> {
     let user = &command.user;
 
+    // This command can only be used in a server
+    let guild_id = match command.guild_id {
+        Some(id) => id,
+        None => {
+            let response = CreateInteractionResponse::Message(
+                CreateInteractionResponseMessage::new()
+                    .content("This command can only be used in a server.")
+                    .ephemeral(true),
+            );
+            command.create_response(&ctx.http, response).await?;
+            return Ok(());
+        }
+    };
+
     // Get the target user from options, or default to command user
     let target_user = if let Some(ResolvedOption {
         value: ResolvedValue::User(u, _),
