@@ -127,9 +127,6 @@
         "devenv": "devenv",
         "git-hooks": "git-hooks",
         "nixpkgs": "nixpkgs",
-        "pre-commit-hooks": [
-          "git-hooks"
-        ],
         "rust-overlay": "rust-overlay",
         "scottylabs": "scottylabs",
         "treefmt-nix": "treefmt-nix"
@@ -156,16 +153,17 @@
     },
     "scottylabs": {
       "locked": {
-        "lastModified": 1779077861,
+        "lastModified": 1781040581,
+        "narHash": "sha256-e/219esVVWdHU4NNRoXkhTVSSvQaqcr8l5LRBad90gE=",
         "ref": "refs/heads/main",
-        "rev": "95f818bc17bc8154cfb009c458d030726d4933a9",
-        "revCount": 25,
+        "rev": "5b23dbca076d09dcd03585f5e021b6285e30b4ce",
+        "revCount": 31,
         "type": "git",
-        "url": "https://codeberg.org/scottylabs/devenv"
+        "url": "https://codeberg.org/ScottyLabs/devenv"
       },
       "original": {
         "type": "git",
-        "url": "https://codeberg.org/scottylabs/devenv"
+        "url": "https://codeberg.org/ScottyLabs/devenv"
       }
     },
     "treefmt-nix": {

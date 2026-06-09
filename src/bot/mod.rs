@@ -172,7 +172,7 @@ pub async fn run(
                 completion.discord_user_id,
                 completion.guild_id.get(),
                 completion.keycloak_user_id,
-                true, // send DM — this is a direct user action
+                true, // send DM, this is a direct user action
             )
             .await
             {
@@ -268,7 +268,7 @@ pub async fn run(
                         .store(false, Ordering::SeqCst);
                 }
             } else if job.batch_index == job.total_batches {
-                // No log channel — still clear the flag when done
+                // No log channel, still clear the flag when done
                 reverify_state
                     .reverify_in_progress
                     .store(false, Ordering::SeqCst);

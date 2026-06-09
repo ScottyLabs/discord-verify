@@ -118,8 +118,6 @@ pub async fn handle(
             continue;
         };
 
-        // Skip the guild membership check here — complete_verification will
-        // fail gracefully if the user isn't in the guild
         users.push(VerificationComplete {
             discord_user_id: serenity::all::UserId::new(user_id_u64),
             guild_id,

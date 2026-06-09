@@ -145,7 +145,7 @@ pub async fn handle(
         .filter(|g| {
             guild_config.verified_role.is_some() && g.members.len() < g.member_count as usize / 2
         })
-        .map(|_| "\n*(member cache still loading — count may be low briefly)*");
+        .map(|_| "\n*(member cache still loading, count may be low briefly)*");
 
     let verified_stats = match guild_config.verified_role {
         Some(_) => {
