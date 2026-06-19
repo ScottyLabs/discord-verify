@@ -4,24 +4,71 @@ mod auth;
 use crate::frontend::app;
 use crate::state::AppState;
 use axum::{
-    Router, error_handling::HandleErrorLayer, http::Uri, response::IntoResponse, routing::get,
+    Router,
+    error_handling::HandleErrorLayer,
+    extract::FromRequestParts,
+    http::{Uri, request::Parts},
+    response::IntoResponse,
+    routing::get,
 };
 use axum_oidc::{
-    EmptyAdditionalClaims, OidcAuthLayer, OidcClient, OidcLoginLayer,
+    AdditionalClaims, EmptyAdditionalClaims, OidcAuthLayer, OidcClient, OidcLoginLayer,
+    OidcSession,
     error::MiddlewareError,
     handle_oidc_redirect,
-    openidconnect::{ClientId, ClientSecret, IssuerUrl, Scope},
+    openidconnect::{ClientId, ClientSecret, CsrfToken, IssuerUrl, Scope, core::CoreGenderClaim},
 };
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use leptos::{config::get_configuration, prelude::provide_context};
 use leptos_axum::{LeptosRoutes, generate_route_list};
+use serde::Serialize;
 use std::sync::Arc;
 use tokio::signal;
 use tower::ServiceBuilder;
 use tower_http::{services::ServeDir, trace::TraceLayer};
 use tower_sessions::{
-    Expiry, MemoryStore, SessionManagerLayer,
+    Expiry, MemoryStore, Session, SessionManagerLayer,
     cookie::{SameSite, time::Duration},
 };
+
+struct SessionWrapper(Session);
+
+impl<S: Send + Sync> FromRequestParts<S> for SessionWrapper {
+    type Rejection = <Session as FromRequestParts<S>>::Rejection;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        Ok(Self(Session::from_request_parts(parts, state).await?))
+    }
+}
+
+impl<AC: AdditionalClaims> axum_oidc::Session<AC> for SessionWrapper {
+    type Error = tower_sessions::session::Error;
+
+    async fn get(&self) -> Result<OidcSession<AC, CoreGenderClaim>, Self::Error> {
+        Ok(self.0.get("axum-oidc").await?.unwrap_or_default())
+    }
+
+    async fn set(&mut self, value: OidcSession<AC, CoreGenderClaim>) -> Result<(), Self::Error> {
+        self.0.insert("axum-oidc", value).await?;
+        Ok(())
+    }
+}
+
+/// OAuth2 state payload carrying the return_to and a CSRF token
+#[derive(Serialize)]
+struct RelayState<'a> {
+    return_to: &'a str,
+    csrf: uuid::Uuid,
+}
+
+/// Build the base64url state with a random csrf to guard against login CSRF
+fn relay_state(return_to: &str) -> String {
+    let state = RelayState {
+        return_to,
+        csrf: uuid::Uuid::new_v4(),
+    };
+    URL_SAFE_NO_PAD.encode(serde_json::to_vec(&state).expect("serialize relay state"))
+}
 
 async fn shutdown_signal() {
     let ctrl_c = async {
@@ -63,7 +110,7 @@ pub async fn serve(state: Arc<AppState>) -> anyhow::Result<()> {
             tracing::error!("Error details: {}", e);
             e.into_response()
         }))
-        .layer(OidcLoginLayer::<EmptyAdditionalClaims>::new());
+        .layer(OidcLoginLayer::<EmptyAdditionalClaims, SessionWrapper>::new());
 
     // Initialize OIDC client
     let scopes = vec![
@@ -78,19 +125,22 @@ pub async fn serve(state: Arc<AppState>) -> anyhow::Result<()> {
     ))
     .expect("valid IssuerUrl");
 
+    // State carries /auth/callback
+    let auth_return_to = format!("{}/auth/callback", state.config.app_url);
     let oidc_client = OidcClient::<EmptyAdditionalClaims>::builder()
         .with_default_http_client()
         .with_redirect_url(
-            Uri::try_from(format!("{}/auth/callback", state.config.app_url))
-                .expect("valid APP_URL"),
+            Uri::try_from(state.config.oauth_relay_url.clone()).expect("valid OAUTH_RELAY_URL"),
         )
         .with_client_id(ClientId::new(state.config.keycloak_oidc_client_id.clone()))
         .with_client_secret(ClientSecret::new(
             state.config.keycloak_oidc_client_secret.clone(),
         ))
         .with_scopes(scopes)
+        .with_state_generator(move || CsrfToken::new(relay_state(&auth_return_to)))
         .discover(issuer_url)
-        .await?
+        .await
+        .map_err(|e| anyhow::anyhow!("oidc discovery failed: {e}"))?
         .build();
 
     tracing::info!("OIDC discovery completed successfully");
@@ -101,7 +151,9 @@ pub async fn serve(state: Arc<AppState>) -> anyhow::Result<()> {
             tracing::error!("Error details: {}", e);
             e.into_response()
         }))
-        .layer(OidcAuthLayer::new(oidc_client));
+        .layer(OidcAuthLayer::<EmptyAdditionalClaims, SessionWrapper>::new(
+            oidc_client,
+        ));
 
     // Leptos configuration
     let conf = get_configuration(Some("Cargo.toml")).unwrap();
@@ -119,7 +171,7 @@ pub async fn serve(state: Arc<AppState>) -> anyhow::Result<()> {
         .route("/api/verify-status/{state}", get(api::verify_status))
         .route(
             "/auth/callback",
-            get(handle_oidc_redirect::<EmptyAdditionalClaims>),
+            get(handle_oidc_redirect::<EmptyAdditionalClaims, SessionWrapper>),
         )
         .layer(oidc_auth_service)
         .layer(session_service)

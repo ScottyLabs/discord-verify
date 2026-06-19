@@ -41,11 +41,12 @@ lib-default-features = false
 [dependencies]
 anyhow = "1.0.100"
 axum = { version = "0.8.6", features = ["macros"] }
-axum-oidc = "=1.0.0-dev-0"
+axum-oidc = { git = "https://codeberg.org/anish/axum-oidc", rev = "c8512b41557f902e061110e4068ec78a564eca80" }
+base64 = "0.22.1"
 chrono = "0.4.42"
 dotenvy = "0.15.7"
 keycloak = "26.4.0"
-leptos = { version = "0.8.12", features = ["csr", "nightly"] }
+leptos = { version = "0.8.12", features = ["csr"] }
 leptos_axum = "0.8.6"
 leptos_router = "0.8.9"
 redis = { version = "0.32.7", features = ["connection-manager", "tokio-comp"] }

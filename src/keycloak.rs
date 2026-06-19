@@ -8,7 +8,6 @@ pub struct KeycloakClient {
 
 impl KeycloakClient {
     pub async fn new(url: &str, realm: &str, client_id: &str, client_secret: &str) -> Result<Self> {
-        // Create HTTP client
         let http_client = reqwest::Client::new();
 
         // Automatically acquires fresh tokens when needed

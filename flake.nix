@@ -11,49 +11,49 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
     devenv.url = "github:cachix/devenv";
-    fenix = {
-      url = "github:nix-community/fenix";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
+    crane.url = "github:ipetkov/crane";
   };
 
-  outputs = { self, nixpkgs, devenv, fenix, ... }:
+  outputs =
+    { nixpkgs
+    , devenv
+    , crane
+    , ...
+    }:
     let
-      systems = [ "x86_64-linux" "aarch64-linux" ];
+      systems = [
+        "x86_64-linux"
+        "aarch64-linux"
+      ];
       forAllSystems = nixpkgs.lib.genAttrs systems;
     in
     {
-      packages = forAllSystems (system:
+      packages = forAllSystems (
+        system:
         let
           pkgs = nixpkgs.legacyPackages.${system};
-          toolchain = fenix.packages.${system}.latest.toolchain;
-          rustPlatform = pkgs.makeRustPlatform {
-            cargo = toolchain;
-            rustc = toolchain;
-          };
-          discord-verify = rustPlatform.buildRustPackage {
+          craneLib = crane.mkLib pkgs;
+
+          commonArgs = {
             pname = "discord-verify";
             version = "0.1.0";
-            src = ./.;
-            cargoLock = {
-              lockFile = ./Cargo.lock;
-              outputHashes = {
-                "serenity-0.12.4" = "sha256-+/7gCmHF97/7HqJ7pIADCzwRPJ/+LVq9q5reFuz3pTk=";
-              };
-            };
-            nativeBuildInputs = [
-              pkgs.pkg-config
-              pkgs.llvmPackages.bintools
-              pkgs.makeWrapper
-            ];
+            src = craneLib.cleanCargoSource ./.;
+            strictDeps = true;
+            nativeBuildInputs = [ pkgs.pkg-config ];
             buildInputs = [ pkgs.openssl ];
-            RUSTFLAGS = "-Clink-self-contained=-linker";
+          };
 
+          cargoArtifacts = craneLib.buildDepsOnly commonArgs;
+
+          discord-verify = craneLib.buildPackage (commonArgs // {
+            inherit cargoArtifacts;
+            doCheck = false;
+            nativeBuildInputs = commonArgs.nativeBuildInputs ++ [ pkgs.makeWrapper ];
             postInstall = ''
               cp ${./Cargo.toml} $out/Cargo.toml
               wrapProgram $out/bin/discord-verify --chdir "$out"
             '';
-          };
+          });
         in
         {
           inherit discord-verify;

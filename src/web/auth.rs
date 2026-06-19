@@ -117,14 +117,15 @@ pub async fn verify_start(
         return AppError::InternalError(anyhow::anyhow!("Session error")).into_response();
     }
 
-    // Redirect to /link-callback which will complete the verification after Discord is linked
-    let redirect_uri = format!("{}/link-callback", state.config.app_url);
+    // State carries /link-callback
+    let relay_state = super::relay_state(&format!("{}/link-callback", state.config.app_url));
     let linking_url = format!(
-        "{}/realms/{}/protocol/openid-connect/auth?client_id={}&redirect_uri={}&response_type=code&scope=openid%20email%20profile&kc_action=idp_link:discord",
+        "{}/realms/{}/protocol/openid-connect/auth?client_id={}&redirect_uri={}&response_type=code&scope=openid%20email%20profile&state={}&kc_action=idp_link:discord",
         state.config.keycloak_url,
         state.config.keycloak_realm,
         urlencoding::encode(&state.config.keycloak_oidc_client_id),
-        urlencoding::encode(&redirect_uri),
+        urlencoding::encode(&state.config.oauth_relay_url),
+        urlencoding::encode(&relay_state),
     );
 
     Redirect::to(&linking_url).into_response()
