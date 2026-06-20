@@ -11,13 +11,16 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
     devenv.url = "github:cachix/devenv";
-    crane.url = "github:ipetkov/crane";
+    scottylabs = {
+      url = "git+https://codeberg.org/ScottyLabs/devenv";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
     { nixpkgs
     , devenv
-    , crane
+    , scottylabs
     , ...
     }:
     let
@@ -32,28 +35,18 @@
         system:
         let
           pkgs = nixpkgs.legacyPackages.${system};
-          craneLib = crane.mkLib pkgs;
 
-          commonArgs = {
+          discord-verify = (scottylabs.mkLib pkgs).buildRustService {
+            src = ./.;
             pname = "discord-verify";
             version = "0.1.0";
-            src = craneLib.cleanCargoSource ./.;
-            strictDeps = true;
-            nativeBuildInputs = [ pkgs.pkg-config ];
+            nativeBuildInputs = [ pkgs.pkg-config pkgs.makeWrapper ];
             buildInputs = [ pkgs.openssl ];
-          };
-
-          cargoArtifacts = craneLib.buildDepsOnly commonArgs;
-
-          discord-verify = craneLib.buildPackage (commonArgs // {
-            inherit cargoArtifacts;
-            doCheck = false;
-            nativeBuildInputs = commonArgs.nativeBuildInputs ++ [ pkgs.makeWrapper ];
-            postInstall = ''
+            buildArgs.postInstall = ''
               cp ${./Cargo.toml} $out/Cargo.toml
               wrapProgram $out/bin/discord-verify --chdir "$out"
             '';
-          });
+          };
         in
         {
           inherit discord-verify;
