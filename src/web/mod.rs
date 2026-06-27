@@ -167,7 +167,7 @@ pub async fn serve(state: Arc<AppState>) -> anyhow::Result<()> {
         .route("/link-callback", get(auth::link_callback))
         .layer(oidc_login_service)
         // Public routes
-        .route("/health", get(api::health))
+        .route("/api/health", get(api::health))
         .route("/api/verify-status/{state}", get(api::verify_status))
         .route(
             "/auth/callback",
