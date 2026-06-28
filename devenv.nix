@@ -17,8 +17,11 @@
       appUrl = "http://localhost:3000";
     };
 
-    kennel.services.discord-verify = {
-      customDomain = "verify.scottylabs.org";
+    kennel = {
+      previewDeployments = false;
+      services.discord-verify = {
+        customDomain = "verify.scottylabs.org";
+      };
     };
   };
 }
