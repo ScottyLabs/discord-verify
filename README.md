@@ -2,6 +2,16 @@
 
 An Andrew ID Verification bot!
 
+## Development
+
+```bash
+# Set up environment variables
+cp .env.example .env
+# Edit .env with your personal Discord bot credentials
+```
+
+Create [a new Discord bot](https://discord.com/developers/applications) or use one of your current ones, and put its token in `.env`. Everything else resolves from Vault when you enter the dev shell.
+
 ## Data Model
 
 ```diff

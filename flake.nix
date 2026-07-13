@@ -10,7 +10,6 @@
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
-    devenv.url = "github:cachix/devenv";
     scottylabs = {
       url = "git+https://codeberg.org/ScottyLabs/devenv";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -18,10 +17,10 @@
   };
 
   outputs =
-    { nixpkgs
-    , devenv
-    , scottylabs
-    , ...
+    {
+      nixpkgs,
+      scottylabs,
+      ...
     }:
     let
       systems = [
@@ -40,7 +39,10 @@
             src = ./.;
             pname = "discord-verify";
             version = "0.1.0";
-            nativeBuildInputs = [ pkgs.pkg-config pkgs.makeWrapper ];
+            nativeBuildInputs = [
+              pkgs.pkg-config
+              pkgs.makeWrapper
+            ];
             buildInputs = [ pkgs.openssl ];
             buildArgs.postInstall = ''
               cp ${./Cargo.toml} $out/Cargo.toml
@@ -50,8 +52,6 @@
         in
         {
           inherit discord-verify;
-          default = discord-verify;
-          devenv = devenv.packages.${system}.devenv;
         }
       );
     };
