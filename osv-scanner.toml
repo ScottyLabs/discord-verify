@@ -1,0 +1,11 @@
+[[IgnoredVulns]]
+id = "RUSTSEC-2023-0071"
+reason = "Marvin timing attack needs RSA private-key operations; rsa sits under openidconnect for JWT verification only, which is public-key"
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0436"
+reason = "unmaintained advisory for paste, a compile-time proc macro under leptos with no runtime exposure"
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0173"
+reason = "unmaintained advisory for proc-macro-error2, a compile-time proc macro under leptos with no runtime exposure"
