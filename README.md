@@ -1,4 +1,8 @@
-# Discord Verify
+<div align="center">
+  <h1>
+    <pre>discord-verify</pre>
+  </h1>
+</div>
 
 An Andrew ID Verification bot!
 
