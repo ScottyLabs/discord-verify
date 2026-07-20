@@ -41,7 +41,7 @@ lib-default-features = false
 [dependencies]
 anyhow = "1.0.100"
 axum = { version = "0.8.6", features = ["macros"] }
-axum-oidc = { git = "https://codeberg.org/anish/axum-oidc", rev = "c8512b41557f902e061110e4068ec78a564eca80" }
+axum-oidc = { git = "https://codeberg.org/pfzetto/axum-oidc", rev = "007135e2c26830f6c89d1659302c228076c7afa7" }
 base64 = "0.22.1"
 chrono = "0.4.42"
 dotenvy = "0.15.7"
