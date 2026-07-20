@@ -1,24 +1,18 @@
 # Nix / devenv
 .devenv/
-.devenv.flake.nix
 .pre-commit-config.yaml
-result
-result-*
 
 # AI
 .mcp.json
 .claude
 
-# direnv
-.direnv/
-
 # Rust
 /target
 .cargo/
+rustc-ice-*.txt
 
 # Secrets
 .env
 
 # OS
 .DS_Store
-rustc-ice-*.txt
