@@ -544,11 +544,11 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1784796856,
-        "narHash": "sha256-wWFrV5/Qbm+lyt5x20E/bSbfJiGKMo4RCxZV8cl/WZI=",
+        "lastModified": 1785571196,
+        "narHash": "sha256-KoTsyMQqnXQZq8deCEnu4QkyldkwH/bpMMhUcfMdGIw=",
         "owner": "nixos",
         "repo": "nixpkgs",
-        "rev": "e2587caef70cea85dd97d7daab492899902dbf5d",
+        "rev": "148bab9c1c3c53136ecb44a6ea356a0ed5b39b06",
         "type": "github"
       },
       "original": {
@@ -768,11 +768,11 @@
         "uv2nix": "uv2nix"
       },
       "locked": {
-        "lastModified": 1785044272,
-        "narHash": "sha256-comx1giRG8dQ6ocTheJhZIMce3nMJBOT6VEpqyp98gs=",
+        "lastModified": 1785216586,
+        "narHash": "sha256-YcLO2NDNZsE3pV0gBEwjh4i3q+hPAXUr0gVZ/FaQ/JA=",
         "ref": "refs/heads/main",
-        "rev": "0793095e418d99167fc31597f0e494cb5fadb81e",
-        "revCount": 352,
+        "rev": "56c5e806bf7a5a6e73d09403ea9828c13d7dd4c5",
+        "revCount": 354,
         "type": "git",
         "url": "https://codeberg.org/ScottyLabs/kennel"
       },
