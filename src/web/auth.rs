@@ -3,7 +3,7 @@ use axum::{
     extract::{Query, State},
     response::{IntoResponse, Redirect, Response},
 };
-use axum_oidc::{EmptyAdditionalClaims, OidcClaims};
+use axum_oidc::{EmptyAdditionalClaims, OidcClaims, openidconnect::PkceCodeChallenge};
 use serde::Deserialize;
 use std::sync::Arc;
 use tower_sessions::Session;
@@ -119,13 +119,17 @@ pub async fn verify_start(
 
     // State carries /link-callback
     let relay_state = super::relay_state(&format!("{}/link-callback", state.config.app_url));
+
+    // Keycloak requires a challenge on the authorize request, but this code is never redeemed
+    let (pkce_challenge, _) = PkceCodeChallenge::new_random_sha256();
     let linking_url = format!(
-        "{}/realms/{}/protocol/openid-connect/auth?client_id={}&redirect_uri={}&response_type=code&scope=openid%20email%20profile&state={}&kc_action=idp_link:discord",
+        "{}/realms/{}/protocol/openid-connect/auth?client_id={}&redirect_uri={}&response_type=code&scope=openid%20email%20profile&state={}&code_challenge={}&code_challenge_method=S256&kc_action=idp_link:discord",
         state.config.keycloak_url,
         state.config.keycloak_realm,
         urlencoding::encode(&state.config.keycloak_oidc_client_id),
         urlencoding::encode(&state.config.oauth_relay_url),
         urlencoding::encode(&relay_state),
+        pkce_challenge.as_str(),
     );
 
     Redirect::to(&linking_url).into_response()
