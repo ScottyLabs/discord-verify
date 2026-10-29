@@ -13,6 +13,14 @@ pub struct VerifyQuery {
     state: String,
 }
 
+/// Authorization response params Keycloak returns after the `idp_link` action
+#[derive(Deserialize)]
+pub struct LinkCallbackQuery {
+    error: Option<String>,
+    error_description: Option<String>,
+    kc_action_status: Option<String>,
+}
+
 #[axum::debug_handler]
 pub async fn verify_start(
     State(state): State<Arc<AppState>>,
@@ -138,10 +146,33 @@ pub async fn verify_start(
 #[axum::debug_handler]
 pub async fn link_callback(
     State(state): State<Arc<AppState>>,
+    Query(query): Query<LinkCallbackQuery>,
     oidc_claims: Option<OidcClaims<EmptyAdditionalClaims>>,
     session: Session,
 ) -> Response {
     tracing::info!("link_callback called");
+
+    if let Some(error) = query.error {
+        return AppError::InternalError(anyhow::anyhow!(
+            "Keycloak rejected the link request: {error} ({})",
+            query.error_description.unwrap_or_default()
+        ))
+        .into_response();
+    }
+
+    match query.kc_action_status.as_deref() {
+        Some("cancelled") => {
+            tracing::info!("User cancelled Discord linking");
+            return AppError::DiscordLinkCancelled.into_response();
+        }
+        Some("error") => {
+            tracing::warn!(
+                "Keycloak failed to link Discord, see its FEDERATED_IDENTITY_LINK_ERROR event"
+            );
+            return AppError::DiscordLinkFailed.into_response();
+        }
+        _ => {}
+    }
 
     let Some(claims) = oidc_claims else {
         return AppError::InternalError(anyhow::anyhow!("User not authenticated")).into_response();
@@ -215,7 +246,7 @@ pub async fn link_callback(
             i
         }
         None => {
-            tracing::warn!("Discord identity not found after auth flow. User may have cancelled.");
+            tracing::warn!("Discord identity not found after Keycloak reported a successful link");
             return AppError::DiscordNotLinked.into_response();
         }
     };

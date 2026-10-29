@@ -66,6 +66,32 @@ pub fn ErrorPage() -> impl IntoView {
                     </div>
                 }.into_view()
             ),
+            "link_cancelled" => (
+                "Discord Linking Cancelled",
+                view! {
+                    <div>
+                        <p>
+                            "You cancelled linking your Discord account. "
+                            "Please try the verification process again."
+                        </p>
+                    </div>
+                }.into_view()
+            ),
+            "link_failed" => (
+                "Discord Linking Failed",
+                view! {
+                    <div>
+                        <p>
+                            "Your Discord account couldn't be linked. "
+                            "It may already be linked to a different account. If so, unlink it in that account's "
+                            <a href="https://idp.scottylabs.org/realms/scottylabs/account" target="_blank" rel="noopener noreferrer">
+                                "account settings"
+                            </a>
+                            " and try again."
+                        </p>
+                    </div>
+                }.into_view()
+            ),
             "server_error" => (
                 "Server Error",
                 view! {

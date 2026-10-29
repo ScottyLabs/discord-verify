@@ -6,6 +6,8 @@ pub enum AppError {
     WrongDiscordAccount,
     AlreadyLinkedToDifferentAccount,
     DiscordNotLinked,
+    DiscordLinkCancelled,
+    DiscordLinkFailed,
     KeycloakError(anyhow::Error),
     RedisError(anyhow::Error),
     InternalError(anyhow::Error),
@@ -22,6 +24,10 @@ impl IntoResponse for AppError {
                 Redirect::to("/error?msg=already_linked").into_response()
             }
             AppError::DiscordNotLinked => Redirect::to("/error?msg=not_linked").into_response(),
+            AppError::DiscordLinkCancelled => {
+                Redirect::to("/error?msg=link_cancelled").into_response()
+            }
+            AppError::DiscordLinkFailed => Redirect::to("/error?msg=link_failed").into_response(),
             AppError::KeycloakError(e) => {
                 tracing::error!("Keycloak error: {:?}", e);
                 Redirect::to("/error?msg=server_error").into_response()
