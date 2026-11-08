@@ -8,7 +8,7 @@ An Andrew ID Verification bot!
 
 ## Development
 
-[Join the Community-Based Projects team through governance](https://git.cmu.dev/ScottyLabs/governance#joining-a-team) to read the development secrets, then install Lix and log in to OpenBao by following kennel's [local development](https://docs.kennel.scottylabs.org/guides/local-development.html#installing-nix) and [secrets](https://docs.kennel.scottylabs.org/guides/secrets.html#local-development) guides.
+[Join the Community-Based Projects team through governance](https://git.cmu.dev/ScottyLabs/governance#joining-a-team) to read the development secrets, then install Lix and log in to OpenBao by following kennel's [local development](https://docs.kennel.scottylabs.org/guides/local-development/#installing-nix) and [secrets](https://docs.kennel.scottylabs.org/guides/secrets/#local-development) guides.
 
 Create [a new Discord bot](https://discord.com/developers/applications) or use one of your current ones, and put its token in `.env`:
 
