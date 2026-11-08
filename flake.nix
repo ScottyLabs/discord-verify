@@ -9,50 +9,48 @@
   };
 
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
-    scottylabs = {
-      url = "git+https://codeberg.org/ScottyLabs/kennel";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
+    scottylabs.url = "git+https://git.cmu.dev/ScottyLabs/kennel";
+    nixpkgs.follows = "scottylabs/nixpkgs";
+    flake-parts.follows = "scottylabs/flake-parts";
   };
 
   outputs =
-    {
-      nixpkgs,
-      scottylabs,
-      ...
-    }:
-    let
+    inputs:
+    inputs.flake-parts.lib.mkFlake { inherit inputs; } {
+      imports = [ inputs.scottylabs.flakeModules.default ];
       systems = [
         "x86_64-linux"
         "aarch64-linux"
+        "aarch64-darwin"
       ];
-      forAllSystems = nixpkgs.lib.genAttrs systems;
-    in
-    {
-      packages = forAllSystems (
-        system:
-        let
-          pkgs = nixpkgs.legacyPackages.${system};
 
-          discord-verify = (scottylabs.mkLib pkgs).buildRustService {
-            src = ./.;
-            pname = "discord-verify";
-            version = "0.1.0";
-            nativeBuildInputs = [
-              pkgs.pkg-config
-              pkgs.makeWrapper
-            ];
-            buildInputs = [ pkgs.openssl ];
-            buildArgs.postInstall = ''
-              cp ${./Cargo.toml} $out/Cargo.toml
-              wrapProgram $out/bin/discord-verify --chdir "$out"
-            '';
-          };
-        in
+      perSystem =
+        { pkgs, helpers, ... }:
         {
-          inherit discord-verify;
-        }
-      );
+          scottylabs = {
+            project.name = "discord-verify";
+            rust.enable = true;
+            valkey.enable = true;
+            ricochet = {
+              enable = true;
+              appUrl = "http://localhost:3000";
+            };
+            previewDeployments = false;
+          };
+
+          services.discord-verify = {
+            package = helpers.buildRustService {
+              src = ./.;
+              pname = "discord-verify";
+              version = "0.1.0";
+              nativeBuildInputs = [ pkgs.makeWrapper ];
+              buildArgs.postInstall = ''
+                cp ${./Cargo.toml} $out/Cargo.toml
+                wrapProgram $out/bin/discord-verify --chdir "$out"
+              '';
+            };
+            customDomain = "verify.scottylabs.org";
+          };
+        };
     };
 }

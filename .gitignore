@@ -1,10 +1,5 @@
-# Nix / devenv
-.devenv/
+# Nix
 .pre-commit-config.yaml
-
-# AI
-.mcp.json
-.claude
 
 # Rust
 /target
