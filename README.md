@@ -8,13 +8,21 @@ An Andrew ID Verification bot!
 
 ## Development
 
+[Join the Community-Based Projects team through governance](https://git.cmu.dev/ScottyLabs/governance#joining-a-team) to read the development secrets, then install Lix and log in to OpenBao by following kennel's [local development](https://docs.kennel.scottylabs.org/guides/local-development.html#installing-nix) and [secrets](https://docs.kennel.scottylabs.org/guides/secrets.html#local-development) guides.
+
+Create [a new Discord bot](https://discord.com/developers/applications) or use one of your current ones, and put its token in `.env`:
+
 ```bash
-# Set up environment variables
 cp .env.example .env
-# Edit .env with your personal Discord bot credentials
 ```
 
-Create [a new Discord bot](https://discord.com/developers/applications) or use one of your current ones, and put its token in `.env`. Everything else resolves from Vault when you enter the dev shell.
+Everything else resolves from OpenBao when you enter the dev shell. Start Valkey and the OAuth relay, then run the bot:
+
+```bash
+nix develop
+pitchfork start --local
+cargo run
+```
 
 ## Data Model
 
