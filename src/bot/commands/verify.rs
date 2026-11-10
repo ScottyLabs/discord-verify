@@ -127,8 +127,7 @@ fn format_roles(roles: Vec<RoleId>) -> String {
 
 /// Complete the verification process by assigning role and storing mappings
 /// Called by the bot task when it receives a verification completion event.
-/// `send_dm` controls whether the user receives a DM on success: pass false
-/// for background jobs like reverify to avoid spamming users.
+/// `send_dm` controls whether the user receives a DM on success: pass false for background jobs like reverify to avoid spamming users.
 pub async fn complete_verification(
     http: &serenity::all::Http,
     _cache: &serenity::all::Cache,

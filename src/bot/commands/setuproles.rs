@@ -71,8 +71,7 @@ pub async fn handle(
                 CreateSelectMenuOption::new("Classes", "classes")
                     .description("First-Year through Doctoral (7 roles)")
                     .default_selection(current_mode == "classes"),
-                // No default_selection on custom because you can switch to a
-                // different custom mode from custom mode
+                // No default_selection on custom because you can switch to a different custom mode from custom mode
                 CreateSelectMenuOption::new("Custom", "custom")
                     .description("Choose which levels and classes to assign"),
             ]
